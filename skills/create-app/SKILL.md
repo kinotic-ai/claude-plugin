@@ -30,10 +30,10 @@ yet. Ask whether they already have a Kinotic OS account, then walk them through 
 matching path — the whole flow happens in their browser, so narrate what they will see:
 
 1. Tell the user to run `/mcp`, select `kinotic-os`, and authenticate. A browser opens
-   on the Kinotic OS login page. The endpoint defaults to Kinotic OS Cloud and is
-   overridden by launching with the `KINOTIC_OS_MCP_URL` environment variable set.
-   If the kinotic-os server is missing from `/mcp` even though the plugin is
-   enabled, add the endpoint directly and continue:
+   on the Kinotic OS login page. The plugin targets Kinotic OS Cloud
+   (`https://api.kinotic.ai/mcp`). If the kinotic-os server is missing from `/mcp`
+   even though the plugin is enabled, or a different Kinotic OS is wanted, add the
+   endpoint directly and continue:
    `claude mcp add --transport http kinotic-os-test <url>` — the tools work the same
    from either.
 2. **Existing account** — sign in, approve the consent screen, done.
