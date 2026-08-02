@@ -22,15 +22,20 @@ For local development, add the marketplace from a checkout path instead:
 
 ## Configuration
 
-The MCP endpoint URL is the `server_url` plugin setting, defaulting to Kinotic OS
-Cloud (`https://api.kinotic.ai/mcp`). How to change it depends on the surface:
+The plugin connects to Kinotic OS Cloud (`https://api.kinotic.ai/mcp`). The URL is a
+literal on purpose: the Claude desktop app neither interpolates `${user_config.*}`
+plugin settings nor lets you edit the plugin connector's URL, so a configurable
+endpoint would leave the plugin broken on desktop out of the box.
 
-- **Claude Code** — you are prompted for `server_url` when the plugin is enabled, or
-  set it up front: `claude plugin install kinotic@kinotic --config server_url=http://localhost:58503/mcp`
-- **Claude desktop app** — the desktop app does not interpolate plugin settings; its
-  connector dialog shows the raw `${user_config.server_url}` placeholder. Replace it
-  with your endpoint URL in that dialog. Desktop accepts only `https` URLs, so local
-  `http` development happens through Claude Code.
+To work against a different Kinotic OS (staging, self-hosted, local), add that
+endpoint as its own MCP server alongside the plugin:
+
+- **Claude Code** — `claude mcp add --transport http kinotic-os-test <your endpoint URL>`
+- **Claude desktop app** — Settings → Connectors → Add custom connector, with your
+  endpoint URL (desktop accepts `https` only)
+
+The skills address the Kinotic OS tools by service name, so they work the same
+through a manually added server.
 
 After installing, run `/mcp`, select `kinotic-os`, and authenticate. The browser opens
 the Kinotic OS OAuth flow — sign up from the login page if you have no account, then
@@ -56,8 +61,8 @@ MCP tool permissions use names of the form
 Requires a running Kinotic OS (`kinotic-server`), a test GitHub org with the Kinotic
 GitHub App installable, and a browser.
 
-1. Point the plugin at the local server:
-   `claude plugin install kinotic@kinotic --config server_url=http://localhost:58503/mcp`.
+1. Add the local server alongside the plugin:
+   `claude mcp add --transport http kinotic-os-test http://localhost:58503/mcp`.
 2. `/mcp` → `kinotic-os` → complete the OAuth flow, including one pass as a brand-new
    signup.
 3. Ask Claude to create an app (or run `/kinotic:new-app TestApp`):
