@@ -1,10 +1,3 @@
-<p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/kinotic-ai/claude-plugin/main/assets/logo-dark.svg">
-    <img src="https://raw.githubusercontent.com/kinotic-ai/claude-plugin/main/assets/logo-light.svg" alt="Kinotic" width="320">
-  </picture>
-</p>
-
 # Kinotic Claude Code Plugin
 
 Build [Kinotic](https://kinotic.ai) applications with Claude. The plugin connects
