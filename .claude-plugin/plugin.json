@@ -9,15 +9,12 @@
   "homepage": "https://kinotic.ai",
   "repository": "https://github.com/kinotic-ai/claude-plugin",
   "license": "Apache-2.0",
-  "keywords": ["kinotic", "typescript", "bun", "persistence", "microservices"],
-  "mcpServers": "./.mcp.json",
-  "userConfig": {
-    "server_url": {
-      "type": "string",
-      "title": "Kinotic OS MCP URL",
-      "description": "URL of the Kinotic OS MCP endpoint. Defaults to Kinotic OS Cloud. For a self-hosted or local server use e.g. http://localhost:58503/mcp",
-      "default": "https://api.kinotic.ai/mcp",
-      "required": false
-    }
-  }
+  "keywords": [
+    "kinotic",
+    "typescript",
+    "bun",
+    "persistence",
+    "microservices"
+  ],
+  "mcpServers": "./.mcp.json"
 }

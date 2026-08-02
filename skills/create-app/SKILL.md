@@ -30,8 +30,9 @@ yet. Ask whether they already have a Kinotic OS account, then walk them through 
 matching path — the whole flow happens in their browser, so narrate what they will see:
 
 1. Tell the user to run `/mcp`, select `kinotic-os`, and authenticate. A browser opens
-   on the Kinotic OS login page. The MCP endpoint URL comes from the plugin setting
-   `server_url` (default: Kinotic OS Cloud; local dev: `http://localhost:58503/mcp`).
+   on the Kinotic OS login page. The plugin connects to Kinotic OS Cloud
+   (`https://api.kinotic.ai/mcp`); a self-hosted or local server is added manually
+   instead: `claude mcp add --transport http kinotic-os http://localhost:58503/mcp`.
 2. **Existing account** — sign in, approve the consent screen, done.
 3. **No account yet** — click **Create an organization** on the login page:
    - Sign up with GitHub, or with email and password (the email path sends a

@@ -22,9 +22,16 @@ For local development, add the marketplace from a checkout path instead:
 
 ## Configuration
 
-| Setting | Default | Purpose |
-|---|---|---|
-| `server_url` | `https://api.kinotic.ai/mcp` | The Kinotic OS MCP endpoint. Point it at a self-hosted or local server (`http://localhost:58503/mcp`) to develop against your own Kinotic OS. |
+The plugin connects to Kinotic OS Cloud (`https://api.kinotic.ai/mcp`). To develop
+against a self-hosted or local Kinotic OS instead, add the endpoint as an MCP server
+yourself — in Claude Code:
+
+```bash
+claude mcp add --transport http kinotic-os http://localhost:58503/mcp
+```
+
+(The Claude desktop app accepts only `https` URLs for custom connectors, so local
+`http` development happens through Claude Code.)
 
 After installing, run `/mcp`, select `kinotic-os`, and authenticate. The browser opens
 the Kinotic OS OAuth flow — sign up from the login page if you have no account, then
@@ -50,7 +57,8 @@ MCP tool permissions use names of the form
 Requires a running Kinotic OS (`kinotic-server`), a test GitHub org with the Kinotic
 GitHub App installable, and a browser.
 
-1. Set the plugin's `server_url` to `http://localhost:58503/mcp`.
+1. Point Claude Code at the local server:
+   `claude mcp add --transport http kinotic-os http://localhost:58503/mcp`.
 2. `/mcp` → `kinotic-os` → complete the OAuth flow, including one pass as a brand-new
    signup.
 3. Ask Claude to create an app (or run `/kinotic:new-app TestApp`):

@@ -2,7 +2,7 @@
   "mcpServers": {
     "kinotic-os": {
       "type": "http",
-      "url": "${user_config.server_url}"
+      "url": "https://api.kinotic.ai/mcp"
     }
   }
 }

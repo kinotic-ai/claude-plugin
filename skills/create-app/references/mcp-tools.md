@@ -1,6 +1,6 @@
 # Kinotic OS MCP tool contracts
 
-The kinotic-os server is a stateless streamable-HTTP MCP endpoint at `POST <server_url>`
+The kinotic-os server is a stateless streamable-HTTP MCP endpoint at `POST <server url>`
 secured by OAuth 2.1. Behavior common to every tool:
 
 - **Results are raw JSON in a single text content block.** The tool result contains one
