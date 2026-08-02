@@ -35,7 +35,7 @@ approve the consent screen. Claude Code stores and refreshes the token automatic
 | Component | Purpose |
 |---|---|
 | `kinotic-os` MCP server | Remote streamable-HTTP MCP endpoint exposing Kinotic OS platform tools (application/project creation, project lookup) secured by OAuth 2.1 |
-| `create-app` skill | End-to-end onboarding: authenticate, create the Application and Project, handle GitHub linking and repo provisioning, clone, verify the scaffold |
+| `create-app` skill | End-to-end onboarding: sign up or sign in to Kinotic OS, create the Application and its first Project, handle GitHub linking and repo provisioning, clone, verify the scaffold |
 | `entities-and-persistence` skill | Entity classes and decorators, `bun run generate`, repository API, named queries, migrations, multi-tenancy |
 | `services` skill | Publishing services with `@Publish`, zones and addressing, service proxies, streaming |
 | `frontend` skill | Connecting browser and Node clients, authentication recipes, calling services from the UI |

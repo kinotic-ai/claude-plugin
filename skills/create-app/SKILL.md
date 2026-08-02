@@ -19,19 +19,35 @@ Kinotic currently supports one project per application, scaffolded as a single
 Bun-workspace mono repo. The project's GitHub repository is created by Kinotic OS —
 never create the repository yourself.
 
-## Step 0 — Verify the Kinotic OS connection
+## Step 0 — Sign up or sign in to Kinotic OS
 
 Check whether the kinotic-os MCP tools are available, e.g. the tool named
 `os-api.org.kinotic.os.api.services.ApplicationService.createApplicationIfNotExist`.
+If they are, the user is already connected — skip to Step 1.
 
-If the tools are missing, the user has not authenticated the `kinotic-os` MCP server yet:
+If the tools are missing, the user has not authenticated the `kinotic-os` MCP server
+yet. Ask whether they already have a Kinotic OS account, then walk them through the
+matching path — the whole flow happens in their browser, so narrate what they will see:
 
-1. Tell the user to run `/mcp`, select `kinotic-os`, and authenticate.
-2. A browser opens for the OAuth flow against the Kinotic OS server. A user without a
-   Kinotic OS account can sign up from the login page, then lands on the consent page —
-   approving it completes the connection.
-3. The MCP endpoint URL comes from the plugin setting `server_url`
-   (default: Kinotic OS Cloud; local dev: `http://localhost:58503/mcp`).
+1. Tell the user to run `/mcp`, select `kinotic-os`, and authenticate. A browser opens
+   on the Kinotic OS login page. The MCP endpoint URL comes from the plugin setting
+   `server_url` (default: Kinotic OS Cloud; local dev: `http://localhost:58503/mcp`).
+2. **Existing account** — sign in, approve the consent screen, done.
+3. **No account yet** — click **Create an organization** on the login page:
+   - Sign up with GitHub, or with email and password (the email path sends a
+     verification email — complete it before continuing).
+   - Pick an organization name on the registration page. This creates the Kinotic
+     organization that will own every application and project.
+   - Invited to an existing organization instead? Accept the emailed invitation link
+     rather than creating a new organization.
+   - The browser returns to the OAuth consent screen — approving it completes the
+     connection.
+4. Back in Claude Code, confirm the kinotic-os tools are now available before moving on.
+
+For a brand-new organization, tell the user up front that one more browser step is
+coming: before the first project can be provisioned, the organization must link GitHub
+(Step 2 fails with "GitHub is not linked" until then). Mentioning it now avoids the
+surprise later.
 
 If tools still do not appear right after a server restart, wait and retry: the service
 directory publishes tools shortly after startup, not instantly.
@@ -72,9 +88,12 @@ idempotent: re-running it returns the existing project unchanged.
 Handle the outcomes:
 
 - **Error containing "GitHub is not linked for this organization"** — the user's Kinotic
-  organization has not installed the Kinotic GitHub App. Direct the user to the Kinotic OS
+  organization has not installed the Kinotic GitHub App. This is the expected state for
+  an organization created moments ago in Step 0. Direct the user to the Kinotic OS
   dashboard in their browser (the same site where they approved the OAuth consent),
-  open the organization settings, and link GitHub. Then re-run the exact same tool call.
+  open the organization settings, and link GitHub — they choose the GitHub account or
+  org to install the Kinotic GitHub App into, and that is where project repositories
+  will be created. Then re-run the exact same tool call.
 - **Result with `repoConnectionStatus: "CONNECTED"`** — proceed to Step 3.
 - **Result with `repoConnectionStatus: "INITIALIZATION_FAILED"`** — the repository was
   created but the baseline commit failed. Call
