@@ -6,12 +6,7 @@ programming model, so a user can go from nothing to a working application: sign 
 create an Application and Project (Kinotic OS provisions the GitHub repository), and
 develop entities, services, and frontends.
 
-> This directory is developed inside the kinotic monorepo and is laid out to become
-> the root of the dedicated `kinotic-ai/claude-plugin` repository.
-
 ## Installation
-
-Once the dedicated repository exists:
 
 ```
 /plugin marketplace add kinotic-ai/claude-plugin
