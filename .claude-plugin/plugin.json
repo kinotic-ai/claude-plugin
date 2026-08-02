@@ -16,14 +16,10 @@
     "persistence",
     "microservices"
   ],
-  "mcpServers": "./.mcp.json",
-  "userConfig": {
-    "server_url": {
-      "type": "string",
-      "title": "Kinotic OS MCP URL",
-      "description": "URL of the Kinotic OS MCP endpoint. Defaults to Kinotic OS Cloud. For a self-hosted or local server use e.g. http://localhost:58503/mcp",
-      "default": "https://api.kinotic.ai/mcp",
-      "required": true
+  "mcpServers": {
+    "kinotic-os": {
+      "type": "http",
+      "url": "${KINOTIC_OS_MCP_URL:-https://api.kinotic.ai/mcp}"
     }
   }
 }
