@@ -3,24 +3,41 @@
 The kinotic-os server is a stateless streamable-HTTP MCP endpoint at `POST <server url>`
 secured by OAuth 2.1. Behavior common to every tool:
 
+- **Tool names are opaque hashes — never hardcode or invent one.** A tool's `name` is
+  the base-36 XXH3-128 of `<zone>~<package>.<ServiceName>/<functionName>` (≤ 25 chars of
+  `[0-9a-z]`), e.g. `os-api~org.kinotic.os.api.services.ProjectService/findById` hashes
+  to something like `5nwldv2gqljeygvmd1ywjl2z7`. Resolve tools from `tools/list` by
+  their human-readable `title` (the titles used below), then call the listed `name`.
+  A stale or invented name fails as a JSON-RPC protocol error (`-32602`,
+  `Unknown tool: <name>`) — not as a tool result.
 - **Results are raw JSON in a single text content block.** The tool result contains one
   `text` item whose text is the JSON serialization of the service's return value — parse
   it. An empty list result is the literal text `[]`.
-- **Unknown argument keys fail the call** with `isError: true`, not a schema rejection.
-  Send exactly the argument names documented below.
-- **Errors arrive as `isError: true`** with the exception message as text content.
-  Match on the message substrings documented below.
+- **Unknown argument keys fail the call** with `isError: true`
+  (`Received argument '<key>' which matches no parameter of <function>`). Send exactly
+  the argument names documented below.
+- **Service errors arrive as `isError: true`** with the exception message as text
+  content. Match on the message substrings documented below.
+- **Every tool carries an `annotations` block** with all four hints written explicitly
+  (`readOnlyHint`, `destructiveHint`, `idempotentHint`, `openWorldHint`). Treat
+  `destructiveHint: true` (`… Save`, `… Delete By Id`, and their `Sync` twins) as
+  never-call-speculatively. `openWorldHint` is `false` on everything except
+  `Project Service Retry Repo Initialization`, which reaches GitHub.
 - Authenticated users act as their Kinotic **organization**, so the tools below operate
   on that organization's applications and projects.
-- Both services expose their **full CRUD surface** as additional tools (`save`,
-  `create`, `findById`, `findAll`, `search`, `count`, `deleteById`, …) beyond those
-  documented below. Stick to the documented tools for the onboarding workflow, and
-  never call a destructive tool such as `deleteById` unless the user explicitly asks
-  for that exact operation.
+- Both services expose their **full CRUD surface** as additional tools (titles like
+  `Application Service Save`, `Project Service Find All`, `Project Service Search`)
+  beyond those documented below. Stick to the documented tools for the onboarding
+  workflow, and never call a destructive tool unless the user explicitly asks for that
+  exact operation. `Application Service Delete By Id` is guarded server-side
+  (`Cannot delete an application with projects in it.`); `Project Service Delete By Id`
+  has no guard at all.
 
 ## ApplicationService
 
-### `os-api.org.kinotic.os.api.services.ApplicationService.createApplicationIfNotExist`
+Qualified name: `os-api~org.kinotic.os.api.services.ApplicationService`
+
+### `Application Service Create Application If Not Exist`
 
 Creates an application, or returns the existing one whose id matches the slugified name.
 Idempotent.
@@ -31,8 +48,9 @@ Arguments:
 { "name": "Inventory App", "description": "Tracks warehouse inventory" }
 ```
 
-`name` must start with a letter and contain only letters, numbers, periods, underscores,
-or dashes.
+Any human-readable `name` works — the server slugifies it into the id (lowercase
+letters, digits, interior dashes). It fails only when the name is blank, slugifies to
+nothing (all punctuation), or slugifies to the reserved id `system`.
 
 Result (Application):
 
@@ -47,14 +65,15 @@ Result (Application):
 }
 ```
 
-`id` is the server-minted slug of `name` (lowercase letters, digits, interior dashes).
-`organizationId` is derived from the authenticated user — pass both into project creation.
+`id` is the server-minted slug of `name`. `organizationId` is derived from the
+authenticated user — pass both into project creation.
 
-### `os-api.org.kinotic.os.api.services.ApplicationService.getOidcConfigurations`
+### `Application Service Get Oidc Configurations`
 
-Read-only. Returns the enabled OIDC configurations registered on an application (used by
-the frontend skill when wiring login). Returns `[]` when the application is not found or
-has none.
+Read-only. Returns the **enabled** OIDC configurations registered on an application
+(used by the frontend skill when wiring login). Returns `[]` when the application has
+none. Errors with `Application not found: <applicationId>` when the id does not name an
+application in the caller's organization.
 
 Arguments:
 
@@ -64,7 +83,9 @@ Arguments:
 
 ## ProjectService
 
-### `os-api.org.kinotic.os.api.services.ProjectService.createProjectIfNotExist`
+Qualified name: `os-api~org.kinotic.os.api.services.ProjectService`
+
+### `Project Service Create Project If Not Exist`
 
 Creates a project and provisions its GitHub repository from the Kinotic template through
 the organization's GitHub App installation. Returns the existing project unchanged if
@@ -87,8 +108,13 @@ The single argument key is exactly `project`:
 
 - `applicationId` and `name` are required; the project id is derived as
   `<applicationId>-<slugified name>` when not set (e.g. `inventory-app-inventory-app`).
-- `organizationId` must match the caller's organization.
-- `sourceOfTruth` accepts only `"TYPESCRIPT"` today.
+- `organizationId` is **required**, not just constrained: omitting it fails with
+  `Organization id must be set on Project`, and a mismatch fails with
+  `Cannot save Project with organizationId '<x>' while authenticated as organization '<y>'`.
+- The GitHub repository is named after the slugified project **name** (truncated to
+  100 chars), created under the account holding the GitHub App installation — record
+  `repoFullName` from the result rather than deriving it.
+- `sourceOfTruth` accepts only `"TYPESCRIPT"` today (it is not validated server-side).
 - `repoPrivate` controls the GitHub repository visibility at creation.
 
 Result (Project) — fields beyond the input:
@@ -109,19 +135,21 @@ Result (Project) — fields beyond the input:
 | Status | Meaning | Action |
 |---|---|---|
 | `CONNECTED` | Repo provisioned and baseline committed | Proceed |
-| `INITIALIZATION_FAILED` | Repo exists but the baseline commit failed | Call `retryRepoInitialization` |
-| `DISCONNECTED` | GitHub revoked the platform's access to the repo | User must re-link in the dashboard |
+| `INITIALIZATION_FAILED` | Repo exists but the baseline commit failed | Call `Project Service Retry Repo Initialization` |
+| `DISCONNECTED` | GitHub revoked the platform's access to the repo | User must re-link in the portal |
 
 Errors:
 
 - `"GitHub is not linked for this organization. Link GitHub before creating a project."`
   — the organization has no GitHub App installation. The user links GitHub in the
-  Kinotic OS dashboard organization settings, then the same call is re-run.
+  Kinotic OS portal (Organization settings → Integrations → GitHub → Link GitHub), then
+  the same call is re-run.
 
-### `os-api.org.kinotic.os.api.services.ProjectService.retryRepoInitialization`
+### `Project Service Retry Repo Initialization`
 
 Re-runs repository initialization for a project left in `INITIALIZATION_FAILED`.
-Succeeds with the project marked `CONNECTED` once the baseline is committed.
+Succeeds with the project marked `CONNECTED` once the baseline is committed; the write
+is read-your-write consistent, so the returned project reflects the outcome.
 
 Arguments:
 
@@ -131,14 +159,21 @@ Arguments:
 
 Errors:
 
+- `"projectId must not be blank"`
 - `"Project for id <projectId> does not exist"`
 - `"Project <projectId> is not awaiting initialization retry (status <status>)"` — the
   project is not in `INITIALIZATION_FAILED`; never call this tool speculatively.
+- `"Project repoId must be set to reinitialize"` (likewise `repoFullName` /
+  `repoDefaultBranch`) — provisioning never got far enough for a retry; re-run project
+  creation instead.
+- `"GitHub is not linked for this organization. …"` — the installation disappeared
+  between create and retry; back to GitHub linking.
 
-### `os-api.org.kinotic.os.api.services.ProjectService.findByRepoFullName`
+### `Project Service Find by GitHub Repo`
 
 Read-only. Looks up projects in the caller's organization whose backing GitHub repo has
-the given `owner/repo` full name. Returns `[]` when none match.
+the given `owner/repo` full name (function `findByRepoFullName`). Returns `[]` when none
+match.
 
 Arguments:
 

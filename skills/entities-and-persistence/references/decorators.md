@@ -62,7 +62,7 @@ filled by `bun run generate`. Aggregates only: COUNT, SUM, AVG, MIN, MAX.
 |---|---|---|
 | `save` | `(entity: T) => Promise<T>` | Returns the saved entity (id populated). |
 | `bulkSave` | `(entities: T[]) => Promise<void>` | One batched request. |
-| `update` | `(entity: T) => Promise<T>` | Partial: only fields present in the payload change. |
+| `update` | `(entity: T) => Promise<T>` | Partial: only fields present in the payload change. Upserts when the entity does not exist. With `@Version`, the version is mandatory (`A Version must be provided when calling update`). |
 | `bulkUpdate` | `(entities: T[]) => Promise<void>` | |
 | `findById` | `(id: string) => Promise<T \| null>` | `null` when not found. |
 | `findByIds` | `(ids: string[]) => Promise<T[]>` | |
@@ -72,7 +72,12 @@ filled by `bun run generate`. Aggregates only: COUNT, SUM, AVG, MIN, MAX.
 | `deleteByQuery` | `(query: string) => Promise<void>` | e.g. `'age < 18'`. |
 | `count` | `() => Promise<number>` | |
 | `countByQuery` | `(query: string) => Promise<number>` | |
-| `syncIndex` | `() => Promise<void>` | Forces index refresh so recent writes are searchable. |
+| `syncIndex` | `() => Promise<void>` | Forces index refresh so recent bulk writes are searchable (`save`/`update` already refresh). |
+| `namedQuery` | `<U>(queryName: string, queryParameters: QueryParameter[]) => Promise<U>` | What generated `@Query` bodies call. |
+| `namedQueryPage` | `<U>(queryName, queryParameters, pageable) => Promise<IterablePage<U>>` | Paged variant. |
+
+Every repository also exposes identity properties: `entityOrganizationId`,
+`entityApplicationId`, `entityName`, `entityId`.
 
 Pagination (`@kinotic-ai/core`): `Pageable.create(pageNumber, pageSize, sort?)` for
 offset paging (zero-indexed), `Pageable.createWithCursor(cursor, pageSize, sort?)` for
@@ -80,7 +85,10 @@ cursor paging.
 
 The generated `<Entity>Repository` constructor is
 `new PersonRepository(entitiesRepository?)` — no arguments needed in normal use; it
-requires `Kinotic.use(PersistencePlugin)` and a connected `Kinotic` singleton.
+requires `Kinotic.use(PersistencePlugin)` and a connected `Kinotic` singleton. The
+subclass forwards a generated `shouldValidate` flag to the base: with
+`validate: true` in `.config/kinotic.config.ts`, the base repository runs
+decorator-derived validation client-side before saves and updates.
 
 ## Deliberately not covered
 

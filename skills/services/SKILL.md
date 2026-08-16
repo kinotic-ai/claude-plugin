@@ -37,28 +37,35 @@ export class GreetingService {
 alone makes it callable but unlisted).
 
 **Zone setup must happen before any `@Publish` class is instantiated.** A microservice
-entry point sets the zone prefix from the project config:
+entry point sets the zone prefix from the project config, then connects with no
+arguments — the server and credentials resolve from the environment:
 
 ```typescript
-import { ConnectionInfo, Kinotic } from '@kinotic-ai/core'
+import { Kinotic } from '@kinotic-ai/core'
 import { appZone } from '@kinotic-ai/os-api'
 import config from './.config/kinotic.config'
 
 Kinotic.zonePrefix = appZone(config.organizationId, config.applicationId)
 // ... instantiate @Publish services, then:
-const connectionInfo = new ConnectionInfo()
-connectionInfo.host = 'localhost'
-connectionInfo.port = 58503
-
-await Kinotic.connect(connectionInfo)
+await Kinotic.connect()
 ```
 
-`ConnectionInfo` is a class with a required `sessionKeepAlive` default — construct it
-and assign fields; a plain object literal fails to type-check against it.
+`Kinotic.connect(options?)` takes an optional plain `ConnectOptions` object literal —
+every field is optional. Unset fields resolve from the environment: the server from
+`KINOTIC_SERVER_HOST` / `KINOTIC_SERVER_PORT` / `KINOTIC_SERVER_USE_SSL`, the
+credentials from `KINOTIC_CLIENT_ID` + `KINOTIC_CLIENT_SECRET` (a machine identity's
+connection credentials — no OAuth grant, no token to manage) or `KINOTIC_TOKEN` for
+bearer auth. An explicit override nests the server fields:
+`Kinotic.connect({ server: { host: 'localhost', port: 58503 } })`. A Node process
+supplying credentials must call `ensureNodeWebSocket()` from `@kinotic-ai/core/node`
+before connecting. When no credentials resolve, connect fails with
+`No Kinotic credentials found; consulted: <resolver names>`.
 
 This registers services in the application's zone `app.<orgId>.<appId>`. A class-level
 `@Zone('billing')` nests a sub-zone (`app.<org>.<app>.billing`); a project-wide default
-can be set via the `kinotic.zone` field in `package.json`.
+comes from `Kinotic.defaultZone`, which the entry point assigns itself (conventionally
+from the `kinotic.zone` field in `package.json`: `Kinotic.defaultZone =
+pkg.kinotic?.zone ?? null` — it is not auto-loaded).
 
 Other service decorators (from `@kinotic-ai/core`):
 
@@ -67,6 +74,10 @@ Other service decorators (from `@kinotic-ai/core`):
   specific instance of a service (e.g. per-node or per-device).
 - `@Context` — marks a method whose **final** parameter receives the platform-injected
   request context (never sent by the caller).
+
+A published method may return a generic type (`Page<Order>`): the platform publishes a
+monomorphized concrete schema for it (`OrderPage`). A doubly-generic return
+(`Page<Map<string, unknown>>`) fails publication — publish a named DTO instead.
 
 Details: <https://kinotic.ai/apps/services/publishing-services>.
 
@@ -89,7 +100,7 @@ export class NotificationService implements INotificationService {
     private readonly serviceProxy: IServiceProxy
 
     constructor(kinotic: IKinotic) {
-        this.serviceProxy = kinotic.serviceProxy('app.acme-org.orders-app.com.example.NotificationService')
+        this.serviceProxy = kinotic.serviceProxy('app.acme-org.orders-app~com.example.NotificationService')
     }
 
     sendAlert(message: string): Promise<void> {
@@ -102,16 +113,21 @@ export class NotificationService implements INotificationService {
 }
 ```
 
-The address string is load-bearing: `<zone>.<namespace>.<ClassName>`, where the zone is
+The address string is load-bearing: `<zone>~<namespace>.<ClassName>` — the `~` (tilde)
+delimits the zone from the qualified name; a dotted address collapses the zone into the
+resource name and routes nowhere. The zones:
 
 | Zone | Contains |
 |---|---|
 | `app.<orgId>.<appId>` | The application's own services |
 | `app-api` | Platform data-plane services available to applications |
 | `os-api` | Platform management services (organization scope) |
+| `system` | Platform-internal services (system participants only) |
 
-The gateway validates the zone on every send against the authenticated participant — a
-wrong zone routes nowhere and can never cross into another application.
+An address without a `~` carries no zone at all and is reachable only by system
+participants — never what an application wants. The gateway validates the zone on every
+send against the authenticated participant — a wrong zone routes nowhere and can never
+cross into another application.
 Addressing spec: <https://kinotic.ai/platform/reference/cri-format>.
 
 ## Streaming

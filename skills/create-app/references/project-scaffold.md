@@ -16,7 +16,7 @@ not "fix" the clone to match this document.
 ├── bunup.config.ts           # bunup workspace definition (packages are registered here)
 ├── .config/
 │   ├── kinotic.config.ts     # Kinotic project configuration (see below)
-│   └── c3/                   # generated entity/query schemas (written by `bun run generate`)
+│   └── c3/                   # generated schemas (written by `bun run generate`; gitignores itself)
 ├── .kinotic/                 # local incremental-generation cache (gitignored — never commit)
 ├── migrations/               # V<N>__<description>.sql migration files (may be absent until first used)
 └── packages/
@@ -45,7 +45,10 @@ not "fix" the clone to match this document.
     },
     "devDependencies": {
         "@kinotic-ai/kinotic-cli": "<pinned version>",
-        "@kinotic-ai/os-api": "<pinned version>"
+        "@kinotic-ai/os-api": "<pinned version>",
+        "@types/bun": "<pinned version>",
+        "bunup": "<pinned version>",
+        "typescript": "<pinned version>"
     },
     "catalog": {
         "@kinotic-ai/core": "<pinned version>",
@@ -58,7 +61,12 @@ not "fix" the clone to match this document.
 ```
 
 Workspace packages reference the catalog (`"@kinotic-ai/core": "catalog:"`) so the
-Kinotic SDK version is pinned once at the root.
+Kinotic SDK version is pinned once at the root. The current SDK line is
+`@kinotic-ai/core` 5.x (5.0.0-beta and up) with the CLI on 5.2.x — after
+`bun install`, check what actually resolved (`bun pm ls | grep @kinotic-ai`); a
+resolution on the 4.x line means the template's pins are stale (note that caret
+ranges like `^5.0.0` never match prerelease versions), which is worth reporting to
+the user rather than silently accepting.
 
 The Kinotic CLI ships as a project dependency with a `generate` script wired in
 `package.json` — repository classes are generated with `bun run generate`, entirely
@@ -102,9 +110,12 @@ export default config
 Each microservice or UI is its own workspace package nested under
 `packages/microservices/` or `packages/ui/` — the root workspace globs cover exactly
 that depth. The template ships a starter at `packages/microservices/main` with the
-canonical entry point (zone prefix from the project config, then
-`Kinotic.connect(new ConnectionInfo())`); copy it for additional services. A minimal
-service package:
+canonical entry point: zone prefix from the project config, then zero-arg
+`await Kinotic.connect()` — the server resolves from `KINOTIC_SERVER_HOST/PORT/USE_SSL`
+and the credentials from `KINOTIC_CLIENT_ID`+`KINOTIC_CLIENT_SECRET` or
+`KINOTIC_TOKEN`. It also carries an optional OpenTelemetry bootstrap (gated on
+`OTEL_EXPORTER_OTLP_ENDPOINT`) and a SIGTERM handler that flushes spans. Copy it for
+additional services. A minimal service package:
 
 ```json
 {
@@ -116,10 +127,15 @@ service package:
     },
     "dependencies": {
         "@<project slug>/domain": "workspace:*",
-        "@kinotic-ai/core": "catalog:"
+        "@kinotic-ai/core": "catalog:",
+        "@kinotic-ai/os-api": "catalog:"
     }
 }
 ```
+
+(The template's starter also pins the OpenTelemetry packages — exporter, resources,
+sdk-node, semantic-conventions — for its tracing bootstrap; carry them over when
+copying the starter.)
 
 ```jsonc
 // tsconfig.json — three levels up to the base config
@@ -127,7 +143,7 @@ service package:
     "extends": "../../../tsconfig.base.json",
     "files": [],
     "include": ["**/*"],
-    "exclude": ["node_modules", "dist"]
+    "exclude": ["node_modules", "dist", "bin"]
 }
 ```
 
@@ -151,5 +167,5 @@ the built `dist/` output instead.
    `organizationId`/`applicationId` match the created Application.
 3. The directories named by `entitiesPaths` exist (create the repository output
    directory if the template left it empty — empty directories don't survive git).
-4. `bun install` succeeds.
+4. `bun install` succeeds and resolves `@kinotic-ai/*` on the current 5.x line.
 5. `bun run type-check` succeeds.
