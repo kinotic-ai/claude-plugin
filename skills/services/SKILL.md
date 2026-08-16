@@ -36,9 +36,10 @@ export class GreetingService {
 `advertise: true` additionally lists the service in the Service Directory (publishing
 alone makes it callable but unlisted).
 
-**Zone setup must happen before any `@Publish` class is instantiated.** A microservice
-entry point sets the zone prefix from the project config, then connects with no
-arguments — the server and credentials resolve from the environment:
+**Entry-point order is `zonePrefix` → `connect()` → instantiate services.** The zone
+prefix must be set before any `@Publish` class is instantiated, and instantiation must
+wait for `connect()` — registration subscribes the service over the live connection
+and throws before one exists:
 
 ```typescript
 import { Kinotic } from '@kinotic-ai/core'
@@ -46,8 +47,8 @@ import { appZone } from '@kinotic-ai/os-api'
 import config from './.config/kinotic.config'
 
 Kinotic.zonePrefix = appZone(config.organizationId, config.applicationId)
-// ... instantiate @Publish services, then:
 await Kinotic.connect()
+// ... instantiate @Publish services here, after connect
 ```
 
 `Kinotic.connect(options?)` takes an optional plain `ConnectOptions` object literal —
@@ -140,7 +141,7 @@ progress, and tailing. Docs: <https://kinotic.ai/apps/services/streaming>.
 ## Rules of thumb
 
 - One connected `Kinotic` singleton per process; `Kinotic.connect` after plugins and
-  zone prefix are set.
+  zone prefix are set, and before any `@Publish` class is instantiated.
 - Service classes hold business logic; entities stay dumb data (persistence is the
   entities-and-persistence skill).
 - Method arguments and returns must be serializable data; use `Promise` for
