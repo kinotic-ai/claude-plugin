@@ -16,7 +16,7 @@ not "fix" the clone to match this document.
 ├── bunup.config.ts           # bunup workspace definition (packages are registered here)
 ├── .config/
 │   ├── kinotic.config.ts     # Kinotic project configuration (see below)
-│   └── c3/                   # generated schemas (written by `bun run generate`; gitignores itself)
+│   └── c3/                   # generated schemas (written by `bun run generate`; committed — the server consumes them)
 ├── .kinotic/                 # local incremental-generation cache (gitignored — never commit)
 ├── migrations/               # V<N>__<description>.sql migration files (may be absent until first used)
 └── packages/

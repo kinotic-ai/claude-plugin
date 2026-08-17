@@ -70,10 +70,10 @@ Rules:
    (once) for new ones, and writes each entity's schema to
    `.config/c3/entities/<namespace>.<name>.json` (named queries to
    `.config/c3/queries/<RepositoryName>.json`). Local only; no server connection.
-3. Commit and push the entity sources and the generated repository classes.
-   `.config/c3` is a regenerated artifact directory that gitignores itself — it never
-   gets committed. Kinotic OS synchronizes entity definitions from the connected
-   GitHub repository. Never run `kinotic login` or `kinotic sync` yourself.
+3. Commit and push everything generate produced — the entity sources, the generated
+   repository classes, and `.config/c3` (the schemas Kinotic OS consumes from the
+   connected GitHub repository — never gitignore them). Never run `kinotic login` or
+   `kinotic sync` yourself.
 
 Only the `Base*` classes are regenerated; the `<Entity>Repository` subclass is created
 once and never overwritten, so custom code (like named queries) belongs there.

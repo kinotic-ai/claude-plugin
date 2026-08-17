@@ -183,11 +183,11 @@ truth.
    classes. The script wraps the Kinotic CLI vendored as a project dependency and runs
    locally — no server connection or login. If the script is missing from
    `package.json`, tell the user instead of improvising.
-3. Commit and push the entity sources and generated repository classes. `.config/c3`
-   is a regenerated artifact directory that gitignores itself — it never gets
-   committed. Kinotic OS synchronizes the project from its connected GitHub
-   repository — never install the Kinotic CLI globally or run `kinotic login` /
-   `kinotic sync` yourself.
+3. Commit and push everything generate produced — entity sources, generated
+   repository classes, and `.config/c3` (the schemas Kinotic OS consumes from the
+   connected repository; never gitignore them). Kinotic OS synchronizes the project
+   from its connected GitHub repository — never install the Kinotic CLI globally or
+   run `kinotic login` / `kinotic sync` yourself.
 
 From here, hand off to the other kinotic skills: entity modeling and persistence →
 `entities-and-persistence`; business logic and APIs → `services`; UI and client
