@@ -54,8 +54,11 @@ Rules:
   definitely-assigned (`!`) properties are also accepted.
 - Strings are exact-match (keyword) indexed unless marked `@Text` (full-text). Numbers
   default to 32-bit INT unless `@Precision(...)` says otherwise.
-- Decorators are compile-time markers read from the source — they have no runtime
-  behavior, so entity classes stay plain data.
+- Decorators are compile-time markers read from the source; entity classes stay plain
+  data. One exception: with `validate: true` in `.config/kinotic.config.ts`, the
+  generated repository enforces the decorators client-side before a save/update
+  reaches the server (the scaffold ships `validate: false`, so the server does the
+  rejecting).
 - For time-series data use `@Entity(MultiTenancyType.NONE, EntityType.STREAM)` with one
   `@TimeReference` timestamp field.
 
@@ -67,9 +70,10 @@ Rules:
    (once) for new ones, and writes each entity's schema to
    `.config/c3/entities/<namespace>.<name>.json` (named queries to
    `.config/c3/queries/<RepositoryName>.json`). Local only; no server connection.
-3. Commit and push everything generate produced — including `.config/c3` — and
-   Kinotic OS synchronizes entity definitions from the connected GitHub repository.
-   Never run `kinotic login` or `kinotic sync` yourself.
+3. Commit and push everything generate produced — the entity sources, the generated
+   repository classes, and `.config/c3` (the schemas Kinotic OS consumes from the
+   connected GitHub repository — never gitignore them). Never run `kinotic login` or
+   `kinotic sync` yourself.
 
 Only the `Base*` classes are regenerated; the `<Entity>Repository` subclass is created
 once and never overwritten, so custom code (like named queries) belongs there.
@@ -82,7 +86,7 @@ import { PersistencePlugin } from '@kinotic-ai/persistence'
 import { PersonRepository } from '../repositories/PersonRepository.js'
 
 Kinotic.use(PersistencePlugin)
-await Kinotic.connect({ host: 'localhost', port: 58503 })
+await Kinotic.connect()   // server + credentials resolve from the environment
 
 const people = new PersonRepository()
 
@@ -91,13 +95,16 @@ const page = await people.findAll(Pageable.create(0, 25))   // page.content, pag
 const hits = await people.search('Jane', Pageable.create(0, 10))  // matches @Text fields
 ```
 
-Full surface: `save`, `bulkSave`, `update` (partial — only fields present change),
-`bulkUpdate`, `findById` (null when missing), `findByIds`, `findAll`, `search`,
-`deleteById`, `deleteByQuery`, `count`, `countByQuery`, `syncIndex`. Signatures in
-`references/decorators.md`.
+Full surface: `save`, `bulkSave`, `update` (partial — only fields present change; an
+update of a missing entity upserts it, and an `@Version` entity must supply the
+version or update is rejected), `bulkUpdate`, `findById` (null when missing),
+`findByIds`, `findAll`, `search`, `deleteById`, `deleteByQuery`, `count`,
+`countByQuery`, `syncIndex`, plus `namedQuery` / `namedQueryPage` (what generated
+`@Query` bodies call). Signatures in `references/decorators.md`.
 
-Writes are not instantly searchable; call `await people.syncIndex()` in tests or
-scripts that query right after writing.
+`save` and `update` are read-your-write (the index refreshes on each call); **bulk**
+writes are not — call `await people.syncIndex()` after `bulkSave`/`bulkUpdate` before
+querying the results.
 
 ## Named queries
 
@@ -123,11 +130,22 @@ Docs: <https://kinotic.ai/apps/persistence/named-queries>.
 
 ## Migrations
 
-Schema changes beyond adding entities/fields are explicit SQL files in `./migrations`,
+Schema changes beyond additive entity changes are explicit SQL files in `./migrations`,
 named `V<N>__<description>.sql` (e.g. `V2__add_status_index.sql`), executed in order
-during server synchronization and recorded so they never re-run. The dialect covers
-CREATE TABLE / DATA STREAM, COMPONENT and INDEX TEMPLATE, ALTER TABLE ADD COLUMN,
-REINDEX, INSERT, UPDATE, DELETE.
+and recorded so they never re-run. The dialect covers CREATE TABLE / DATA STREAM,
+COMPONENT and INDEX TEMPLATE, ALTER TABLE ADD COLUMN, REINDEX, INSERT, UPDATE, DELETE
+— including OBJECT / NESTED / UNION column types for structured fields. Two rules
+carry real weight:
+
+- **Mappings are strict.** Storage mappings reject any field they do not know, failing
+  the first save at runtime. Adding a field to an entity is handled by re-publishing
+  the definition (additive updates apply automatically), but if the table was created
+  by a migration, every later entity field needs a matching `ALTER TABLE ADD COLUMN`.
+  Non-additive changes (type change, rename, table→stream) always need an explicit
+  migration plus `REINDEX` — the platform refuses them as in-place updates.
+- An `INSERT` that omits the logical `id` column stores the row under a random
+  document id, unreachable by `findById`.
+
 Grammar: <https://kinotic.ai/apps/reference/migration-sql-grammar>.
 
 ## Multi-tenancy

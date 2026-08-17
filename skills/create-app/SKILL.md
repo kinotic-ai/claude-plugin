@@ -19,58 +19,82 @@ Kinotic currently supports one project per application, scaffolded as a single
 Bun-workspace mono repo. The project's GitHub repository is created by Kinotic OS —
 never create the repository yourself.
 
+**MCP tool names are opaque hashes.** Resolve every Kinotic OS tool from the tool
+listing by its human-readable `title` (e.g. `Application Service Create Application If
+Not Exist`) — never call a tool by a guessed or remembered name, and never parse the
+hash. `references/mcp-tools.md` documents each tool by title.
+
 ## Step 0 — Sign up or sign in to Kinotic OS
 
-Check whether the kinotic-os MCP tools are available, e.g. the tool named
-`os-api.org.kinotic.os.api.services.ApplicationService.createApplicationIfNotExist`.
-If they are, the user is already connected — skip to Step 1.
+Check whether the kinotic-os MCP tools are available — look in the tool listing for
+titles starting with `Application Service` / `Project Service` (e.g.
+`Application Service Create Application If Not Exist`). If they are present, the user
+is already connected — skip to Step 1.
 
 If the tools are missing, the user has not authenticated the `kinotic-os` MCP server
 yet. Ask whether they already have a Kinotic OS account, then walk them through the
 matching path — the whole flow happens in their browser, so narrate what they will see:
 
 1. Tell the user to run `/mcp`, select `kinotic-os`, and authenticate. A browser opens
-   on the Kinotic OS login page. The plugin targets Kinotic OS Cloud
-   (`https://api.kinotic.ai/mcp`). If the kinotic-os server is missing from `/mcp`
-   even though the plugin is enabled, or a different Kinotic OS is wanted, add the
-   endpoint directly and continue:
-   `claude mcp add --transport http kinotic-os-test <url>` — the tools work the same
-   from either.
-2. **Existing account** — sign in, approve the consent screen, done.
+   on the Kinotic OS **portal** login page — the one with a "New to Kinotic?
+   **Create an organization**" link. The plugin targets Kinotic OS Cloud
+   (`https://api.kinotic.ai/mcp`); for a different Kinotic OS see "Other servers"
+   below.
+2. **Existing account** — sign in, then on the consent screen ("Authorize …", with a
+   "Verified as <host>" line) click **Approve**. **Deny** is a real decision that
+   returns a denial to Claude Code — the tools will not appear. If the page shows
+   "Authorization request unavailable", the link is stale: re-run `/mcp` to mint a
+   fresh one.
 3. **No account yet** — click **Create an organization** on the login page:
-   - Sign up with GitHub, or with email and password (the email path sends a
-     verification email — complete it before continuing).
-   - Pick an organization name on the registration page. This creates the Kinotic
-     organization that will own every application and project.
-   - Invited to an existing organization instead? Accept the emailed invitation link
-     rather than creating a new organization.
-   - The browser returns to the OAuth consent screen — approving it completes the
-     connection.
+   - Sign up with GitHub — that is the only sign-up path (Kinotic projects are backed
+     by GitHub repositories, so the organization starts from the user's GitHub
+     identity). Users invited to an existing organization accept the emailed
+     invitation link instead of creating a new organization.
+   - Pick an organization name (and optional description) on the registration page and
+     click **Create organization**. This creates the Kinotic organization that owns
+     every application and project.
+   - The page then shows **"Your organization is ready"** with a **Continue to
+     GitHub** button — this installs the Kinotic GitHub App, which authorizes
+     repository access. The user chooses the GitHub account or org to install into;
+     that is where project repositories will be created. GitHub may interrupt with a
+     sudo email code or a 2FA prompt — normal, not a Kinotic error.
+   - Signup ends on the Applications page. It does **not** return to the OAuth consent
+     screen — the authorization request is not resumed. Tell the user to go back to
+     Claude Code and run `/mcp` → `kinotic-os` → authenticate again; now signed in,
+     they land directly on the consent screen — click **Approve**.
 4. Back in Claude Code, confirm the kinotic-os tools are now available before moving on.
-
-For a brand-new organization, tell the user up front that one more browser step is
-coming: before the first project can be provisioned, the organization must link GitHub
-(Step 2 fails with "GitHub is not linked" until then). Mentioning it now avoids the
-surprise later.
 
 If tools still do not appear right after a server restart, wait and retry: the service
 directory publishes tools shortly after startup, not instantly.
 
+The user can review or revoke this connection later under **Account → Connected apps**
+in the portal.
+
+**Other servers.** A staging, self-hosted, or local Kinotic OS is added as its own MCP
+server: `claude mcp add --transport http kinotic-os-test <url>` — the tools work the
+same from either. Two server-side settings gate this: the server must list Claude
+Code's client-metadata URL in `kinotic.domain.oauth.allowedClientIds` (there is no
+dynamic client registration), and a server whose OAuth surface is reached at a
+different host than the browser uses (e.g. localhost behind a tunnel) must set
+`kinotic.domain.oauth.issuerBaseUrl`. Missing either looks like "the server never
+appeared" after OAuth.
+
 ## Step 1 — Create the Application
 
 1. Ask the user for an application name and one-line description if not already known.
-   The name must start with a letter and contain only letters, numbers, periods,
-   underscores, or dashes.
-2. Call `os-api.org.kinotic.os.api.services.ApplicationService.createApplicationIfNotExist`
-   with `{"name": ..., "description": ...}`. The call is idempotent — if the application
+   Any human-readable name works — the server slugifies it into the application id. It
+   is rejected only when blank, all punctuation, or slugifying to the reserved id
+   `system`.
+2. Call the tool titled `Application Service Create Application If Not Exist` with
+   `{"name": ..., "description": ...}`. The call is idempotent — if the application
    already exists it is returned unchanged.
 3. From the result, record `id` (the server-minted slug of the name, e.g.
    `Inventory App` → `inventory-app`) and `organizationId`. Both are needed in Step 2.
 
 ## Step 2 — Create the Project (provisions the GitHub repository)
 
-Call `os-api.org.kinotic.os.api.services.ProjectService.createProjectIfNotExist`. The
-single argument key is exactly `project`:
+Call the tool titled `Project Service Create Project If Not Exist`. The single argument
+key is exactly `project`:
 
 ```json
 {
@@ -85,31 +109,42 @@ single argument key is exactly `project`:
 }
 ```
 
-Creation provisions a GitHub repository from the Kinotic template through the
-organization's GitHub App installation and commits a rendered baseline. The call is
-idempotent: re-running it returns the existing project unchanged.
+`organizationId` is required — the server rejects a project without it. Creation
+provisions a GitHub repository from the Kinotic template through the organization's
+GitHub App installation and commits a rendered baseline. The call is idempotent:
+re-running it returns the existing project unchanged.
 
 Handle the outcomes:
 
-- **Error containing "GitHub is not linked for this organization"** — the user's Kinotic
-  organization has not installed the Kinotic GitHub App. This is the expected state for
-  an organization created moments ago in Step 0. Direct the user to the Kinotic OS
-  dashboard in their browser (the same site where they approved the OAuth consent),
-  open the organization settings, and link GitHub — they choose the GitHub account or
-  org to install the Kinotic GitHub App into, and that is where project repositories
-  will be created. Then re-run the exact same tool call.
+- **Error containing "GitHub is not linked for this organization"** — the organization
+  has no GitHub App installation. Fresh signups normally completed this during Step 0
+  ("Continue to GitHub"), so this error usually means that install was skipped or
+  abandoned. Direct the user to the Kinotic OS portal → sidebar **Organization →
+  Organization settings** → **Integrations** → the **GitHub** card → **Link GitHub**.
+  They choose the GitHub account or org to install the Kinotic GitHub App into — that
+  is where project repositories are created; on success the card reads "Linked as
+  <account>". An organization holds one installation at a time (moving to a different
+  account requires **Unlink** first). Then re-run the exact same tool call.
+- **GitHub App installs can fail visibly.** The install returns to a callback page; on
+  failure it shows "Couldn't finish linking GitHub" plus a reason. Common ones:
+  *state is missing, expired, or already used* (the install state is single-use and
+  expires in 10 minutes — start the link again from Organization settings; never
+  refresh or re-open the callback URL); *the GitHub account that authorized this
+  install does not have access to the requested installation* (they authorized GitHub
+  as a different user than the owner/admin of the target account — retry signed in as
+  the right GitHub user); *already linked to installation N* (Unlink first).
 - **Result with `repoConnectionStatus: "CONNECTED"`** — proceed to Step 3.
 - **Result with `repoConnectionStatus: "INITIALIZATION_FAILED"`** — the repository was
-  created but the baseline commit failed. Call
-  `os-api.org.kinotic.os.api.services.ProjectService.retryRepoInitialization` with
-  `{"projectId": "<project id>"}`. Never call it in any other status — it fails unless
-  the project is awaiting a retry. If the retry also fails, report the error to the user
-  and stop; do not delete or recreate anything.
+  created but the baseline commit failed. Call the tool titled
+  `Project Service Retry Repo Initialization` with `{"projectId": "<project id>"}`.
+  Never call it in any other status — it fails unless the project is awaiting a retry.
+  If the retry also fails, report the error to the user and stop; do not delete or
+  recreate anything.
 
-Record `repoFullName` (`owner/repo`) from the result. If you are ever unsure whether a
-project already exists for a repository, call
-`os-api.org.kinotic.os.api.services.ProjectService.findByRepoFullName` with
-`{"repoFullName": "owner/repo"}`.
+Record `repoFullName` (`owner/repo`) from the result — the repo is named after the
+slugified project name, not the project id, so never derive it. If you are ever unsure
+whether a project already exists for a repository, call the tool titled
+`Project Service Find by GitHub Repo` with `{"repoFullName": "owner/repo"}`.
 
 ## Step 3 — Connect to GitHub and clone
 
@@ -132,9 +167,13 @@ Compare the cloned repository against `references/project-scaffold.md`. In short
 workspace with `packages/domain`, `packages/microservices`, `packages/ui`, and a
 `.config/kinotic.config.ts` whose `organizationId` and `applicationId` match Step 1.
 
-Run `bun install`, then `bun run type-check`. Report any mismatch between the clone and
-the expected shape to the user instead of silently changing files — the repository
-contents are the source of truth.
+Run `bun install`, then `bun run type-check`. Check which `@kinotic-ai/*` versions
+actually resolved (`bun pm ls | grep @kinotic-ai`) — the current SDK line is
+`5.x` (`@kinotic-ai/core` 5.0.0-beta and up); a resolution on the old `4.x` line means
+the template's catalog pins are stale, which is worth reporting to the user rather than
+working around. Report any mismatch between the clone and the expected shape to the
+user instead of silently changing files — the repository contents are the source of
+truth.
 
 ## Step 5 — First entity and handoff
 
@@ -144,9 +183,11 @@ contents are the source of truth.
    classes. The script wraps the Kinotic CLI vendored as a project dependency and runs
    locally — no server connection or login. If the script is missing from
    `package.json`, tell the user instead of improvising.
-3. Commit and push. Kinotic OS synchronizes the project from its connected GitHub
-   repository — never install the Kinotic CLI globally or run `kinotic login` /
-   `kinotic sync` yourself.
+3. Commit and push everything generate produced — entity sources, generated
+   repository classes, and `.config/c3` (the schemas Kinotic OS consumes from the
+   connected repository; never gitignore them). Kinotic OS synchronizes the project
+   from its connected GitHub repository — never install the Kinotic CLI globally or
+   run `kinotic login` / `kinotic sync` yourself.
 
 From here, hand off to the other kinotic skills: entity modeling and persistence →
 `entities-and-persistence`; business logic and APIs → `services`; UI and client
