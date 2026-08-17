@@ -36,10 +36,13 @@ export class GreetingService {
 `advertise: true` additionally lists the service in the Service Directory (publishing
 alone makes it callable but unlisted).
 
-**Entry-point order is `zonePrefix` → `connect()` → instantiate services.** The zone
-prefix must be set before any `@Publish` class is instantiated, and instantiation must
-wait for `connect()` — registration subscribes the service over the live connection
-and throws before one exists:
+**Set `zonePrefix` before instantiating any `@Publish` class.** The zone is baked into
+the registration when the class is instantiated, so a prefix set afterwards leaves the
+service listening at the wrong address, silently. Instantiation order relative to
+`connect()` is free: registrations queue until the connection is up and re-subscribe on
+every reconnect — including across an explicit `disconnect()` / `connect()` cycle.
+Outbound calls are the opposite — invoking a proxy or sending while disconnected throws
+`You must call connect() before sending any data`; messages are never queued.
 
 ```typescript
 import { Kinotic } from '@kinotic-ai/core'
@@ -48,7 +51,7 @@ import config from './.config/kinotic.config'
 
 Kinotic.zonePrefix = appZone(config.organizationId, config.applicationId)
 await Kinotic.connect()
-// ... instantiate @Publish services here, after connect
+// ... instantiate @Publish services here (before or after connect both work)
 ```
 
 `Kinotic.connect(options?)` takes an optional plain `ConnectOptions` object literal —
@@ -140,8 +143,9 @@ progress, and tailing. Docs: <https://kinotic.ai/apps/services/streaming>.
 
 ## Rules of thumb
 
-- One connected `Kinotic` singleton per process; `Kinotic.connect` after plugins and
-  zone prefix are set, and before any `@Publish` class is instantiated.
+- One connected `Kinotic` singleton per process; set `Kinotic.zonePrefix` before any
+  `@Publish` class is instantiated — instantiation before or after `connect()` both
+  work.
 - Service classes hold business logic; entities stay dumb data (persistence is the
   entities-and-persistence skill).
 - Method arguments and returns must be serializable data; use `Promise` for
