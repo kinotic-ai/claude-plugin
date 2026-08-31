@@ -15,9 +15,9 @@ Follow these steps in order. Exact MCP tool contracts (argument and result JSON 
 error strings) are in `references/mcp-tools.md`. The expected repository layout is in
 `references/project-scaffold.md`.
 
-Kinotic currently supports one project per application, scaffolded as a single
-Bun-workspace mono repo. The project's GitHub repository is created by Kinotic OS —
-never create the repository yourself.
+An application holds one or more projects; the workflow below creates the first one,
+scaffolded as a Bun-workspace mono repo. The project's GitHub repository is created by
+Kinotic OS — never create the repository yourself.
 
 **MCP tool names are opaque hashes.** Resolve every Kinotic OS tool from the tool
 listing by its human-readable `title` (e.g. `Application Service Create Application If
@@ -83,8 +83,8 @@ appeared" after OAuth.
 
 1. Ask the user for an application name and one-line description if not already known.
    Any human-readable name works — the server slugifies it into the application id. It
-   is rejected only when blank, all punctuation, or slugifying to the reserved id
-   `system`.
+   is rejected only when blank, all punctuation, or slugifying to the platform-reserved
+   id `system-api`.
 2. Call the tool titled `Application Service Create Application If Not Exist` with
    `{"name": ..., "description": ...}`. The call is idempotent — if the application
    already exists it is returned unchanged.
@@ -139,7 +139,8 @@ Handle the outcomes:
   `Project Service Retry Repo Initialization` with `{"projectId": "<project id>"}`.
   Never call it in any other status — it fails unless the project is awaiting a retry.
   If the retry also fails, report the error to the user and stop; do not delete or
-  recreate anything.
+  recreate anything. Deleting a project cascades to its deployment and machine
+  identities, so it is never a recovery step.
 
 Record `repoFullName` (`owner/repo`) from the result — the repo is named after the
 slugified project name, not the project id, so never derive it. If you are ever unsure
@@ -164,18 +165,19 @@ have access to it.
 ## Step 4 — Verify the scaffold
 
 Compare the cloned repository against `references/project-scaffold.md`. In short: a Bun
-workspace with `packages/domain`, `packages/microservices`, `packages/ui`, and a
+workspace with `packages/domain`, `packages/microservices/main`, `packages/ui`, and a
 `.config/kinotic.config.ts` whose `organizationId` and `applicationId` match Step 1.
 
 Run `bun install`, then `bun run type-check`. Check which `@kinotic-ai/*` versions
-actually resolved (`bun pm ls | grep @kinotic-ai`) — the current SDK line is
-`5.x` (`@kinotic-ai/core` 5.0.0-beta and up); a resolution on the old `4.x` line means
-the template's catalog pins are stale, which is worth reporting to the user rather than
-working around. Report any mismatch between the clone and the expected shape to the
-user instead of silently changing files — the repository contents are the source of
-truth.
+actually resolved (`bun pm ls | grep @kinotic-ai`) — the current SDK line is `5.x`
+(`@kinotic-ai/core` 5.0.0-beta and up, `@kinotic-ai/management-api` alongside it). A
+resolution on the old `4.x` line, or any `@kinotic-ai/os-api` (renamed to
+`@kinotic-ai/management-api`), means the template's catalog pins are stale — report that
+to the user rather than working around it. Report any mismatch between the clone and the
+expected shape to the user instead of silently changing files — the repository contents
+are the source of truth.
 
-## Step 5 — First entity and handoff
+## Step 5 — First entity, first push
 
 1. Define a first entity under the path listed in `.config/kinotic.config.ts`
    `entitiesPaths` (see the entities-and-persistence skill).
@@ -183,12 +185,26 @@ truth.
    classes. The script wraps the Kinotic CLI vendored as a project dependency and runs
    locally — no server connection or login. If the script is missing from
    `package.json`, tell the user instead of improvising.
-3. Commit and push everything generate produced — entity sources, generated
-   repository classes, and `.config/c3` (the schemas Kinotic OS consumes from the
-   connected repository; never gitignore them). Kinotic OS synchronizes the project
-   from its connected GitHub repository — never install the Kinotic CLI globally or
-   run `kinotic login` / `kinotic sync` yourself.
+3. Export the entity and its repository from `packages/domain/index.ts` — nothing else
+   in the workspace can import them until you do — then run `bun run type-check`.
+4. Commit and push everything generate produced: entity sources, the generated
+   repository classes, and `.config/c3` (a committed generation artifact — keep it in
+   git so schema changes show up in diffs; never gitignore it). Never run
+   `kinotic login` or `kinotic sync` yourself.
+5. **The push is the deployment.** A push to the default branch builds the project,
+   synchronizes the entity definitions, and starts (or reloads) the runtime that runs
+   `packages/microservices/main/src/main.ts`. Verify it landed with the tool titled
+   `Project Service Find Deployment` (`{"projectId": "<project id>"}`) — poll until
+   `status.type` is `RUNNING` with the pushed `commitSha`, and report a `FAILED`
+   status's `message` to the user. Full workflow and failure handling: the `deploying`
+   skill.
+6. **Tell the user to publish the entity.** A synchronized entity definition has no
+   backing storage until someone publishes it in the portal (Application → Project →
+   **Entity Definitions** → publish). Until then every repository call fails, even with
+   the deployment `RUNNING`. There is no MCP tool for this — wait for the user to
+   confirm. Details and the additive-only rule that follows publication: the
+   `entities-and-persistence` skill.
 
 From here, hand off to the other kinotic skills: entity modeling and persistence →
 `entities-and-persistence`; business logic and APIs → `services`; UI and client
-connections → `frontend`.
+connections → `frontend`; running, releasing, and diagnosing → `deploying`.

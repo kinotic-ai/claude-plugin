@@ -1,7 +1,7 @@
 {
   "name": "kinotic",
-  "version": "0.3.1",
-  "description": "Build Kinotic applications with Claude: onboard onto Kinotic OS, create apps and projects through the Kinotic MCP server, and develop entities, services, and frontends",
+  "version": "0.4.0",
+  "description": "Build Kinotic applications with Claude: onboard onto Kinotic OS, create apps and projects through the Kinotic MCP server, and develop, deploy, and run entities, services, and frontends",
   "author": {
     "name": "Kinotic AI",
     "url": "https://kinotic.ai"
@@ -14,7 +14,8 @@
     "typescript",
     "bun",
     "persistence",
-    "microservices"
+    "microservices",
+    "deployment"
   ],
   "mcpServers": {
     "kinotic-os": {

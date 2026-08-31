@@ -11,9 +11,17 @@
     {
       "name": "kinotic",
       "source": "./",
-      "description": "Build Kinotic applications: connect to Kinotic OS, create apps and projects, and develop entities, services, and frontends",
+      "description": "Build Kinotic applications: connect to Kinotic OS, create apps and projects, develop entities, services, and frontends, and deploy them by pushing",
       "category": "development",
-      "keywords": ["kinotic", "typescript", "bun", "backend", "persistence", "mcp"]
+      "keywords": [
+        "kinotic",
+        "typescript",
+        "bun",
+        "backend",
+        "persistence",
+        "deployment",
+        "mcp"
+      ]
     }
   ]
 }
