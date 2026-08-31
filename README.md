@@ -50,12 +50,33 @@ approve the consent screen. Claude Code stores and refreshes the token automatic
 
 | Component | Purpose |
 |---|---|
-| `kinotic-os` MCP server | Remote streamable-HTTP MCP endpoint exposing Kinotic OS platform tools (application/project creation, project lookup) secured by OAuth 2.1 |
-| `create-app` skill | End-to-end onboarding: sign up or sign in to Kinotic OS, create the Application and its first Project, handle GitHub linking and repo provisioning, clone, verify the scaffold |
+| `kinotic-os` MCP server | Remote streamable-HTTP MCP endpoint exposing Kinotic OS platform tools (application/project creation, project lookup, deployment status) secured by OAuth 2.1 |
+| `create-app` skill | End-to-end onboarding: sign up or sign in to Kinotic OS, create the Application and its first Project, handle GitHub linking and repo provisioning, clone, verify the scaffold, first entity and first push |
 | `entities-and-persistence` skill | Entity classes and decorators, `bun run generate`, repository API, named queries, migrations, multi-tenancy |
-| `services` skill | Publishing services with `@Publish`, zones and addressing, service proxies, streaming |
-| `frontend` skill | Connecting browser and Node clients, authentication recipes, calling services from the UI |
+| `services` skill | Publishing services with `@Publish`, zones and addressing, the organization scope a service host needs, service proxies, streaming |
+| `frontend` skill | Connecting browser and Node clients, authentication recipes, application users and OIDC, calling services from the UI |
+| `deploying` skill | Push-to-deploy: what the platform actually runs, the deployment job, checking status with `Project Service Find Deployment`, diagnosing failures, machine identities, what can be run locally |
 | `/kinotic:new-app` command | Deterministic entry point that runs the create-app workflow |
+
+## How a Kinotic app fits together
+
+A push to the project repository's default branch is the whole pipeline. The deployment
+runs a sandboxed build VM that checks the commit out, installs, and runs `kinotic sync`
+(which regenerates from the entity sources, pushes the entity definitions and named
+queries, and applies migrations), then starts or reloads a long-lived VM running
+`packages/microservices/main/src/main.ts`. A commit that does not compile fails the build
+and never reaches the running services.
+
+Three consequences shape every skill in this plugin:
+
+- **Only that one entry file is run.** Extra microservice packages are built but never
+  started, and `packages/ui` is built but not hosted by the platform.
+- **Hosting a `@Publish` service requires organization scope**, which the portal's
+  Machines page does not mint. Running your services means pushing.
+- **A published entity definition is additive-only.** The push publishes new entities and
+  creates their storage, but from then on only new fields apply in place — a rename or
+  type change needs a migration, or an un-publish that drops the index and its data.
+
 
 Kinotic OS mints MCP tool names as opaque base-36 hashes (≤ 25 chars of `[0-9a-z]`),
 so permission names look like `mcp__plugin_kinotic_kinotic-os__5nwldv2gqljeygvmd1ywjl2z7`
@@ -83,8 +104,13 @@ GitHub App installable, and a browser.
 4. Clone the repo and compare against
    `skills/create-app/references/project-scaffold.md` — fix that reference, not the
    clone, if the template has drifted.
-5. `bun install`, `bun run generate` (with a first entity), `bun run type-check`,
-   commit, push; confirm Kinotic OS synchronizes the entity definitions.
-6. Spot-check skill triggering: "define a kinotic entity for orders" should load
-   entities-and-persistence, "publish a service" the services skill, and neither
-   should fire on unrelated prompts.
+5. `bun install`, `bun run generate` (with a first entity), export it from
+   `packages/domain/index.ts`, `bun run type-check`, commit, push. Then poll
+   `Project Service Find Deployment` until `status.type` is `RUNNING` on the pushed
+   `commitSha`, confirm the entity definitions arrived published, and verify a `save()`
+   round-trips without any manual step.
+6. Push a commit that does not compile and verify the deployment reports `FAILED` with a
+   reason while the previous commit keeps running.
+7. Spot-check skill triggering: "define a kinotic entity for orders" should load
+   entities-and-persistence, "publish a service" the services skill, "why isn't my
+   service running" the deploying skill, and none should fire on unrelated prompts.

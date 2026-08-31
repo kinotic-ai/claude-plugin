@@ -70,20 +70,55 @@ Rules:
    (once) for new ones, and writes each entity's schema to
    `.config/c3/entities/<namespace>.<name>.json` (named queries to
    `.config/c3/queries/<RepositoryName>.json`). Local only; no server connection.
-3. Commit and push everything generate produced — the entity sources, the generated
-   repository classes, and `.config/c3` (the schemas Kinotic OS consumes from the
-   connected GitHub repository — never gitignore them). Never run `kinotic login` or
+3. **Export the entity and its repository from the domain package's `index.ts`.**
+   Generation does not touch the barrel, and nothing else in the workspace can import
+   what is not exported from it:
+
+   ```typescript
+   // packages/domain/index.ts
+   export * from './model/Person.js'
+   export * from './repositories/PersonRepository.js'
+   ```
+4. Run `bun run type-check`, then commit and push everything generate produced — the
+   entity sources, the generated repository classes, and `.config/c3`. Keep `.config/c3`
+   in git: it is a generation artifact rather than a server input, but committing it is
+   what makes a schema change visible in a diff. Never run `kinotic login` or
    `kinotic sync` yourself.
+
+Pushing to the default branch is what reaches the server: the deployment's build VM runs
+`kinotic sync` over the checkout, which regenerates, pushes the entity definitions and
+named queries, and applies pending migrations. A commit that does not compile fails
+there and never reaches the running services — so `bun run type-check` locally before
+pushing, and confirm the outcome with `Project Service Find Deployment` (the `deploying`
+skill).
 
 Only the `Base*` classes are regenerated; the `<Entity>Repository` subclass is created
 once and never overwritten, so custom code (like named queries) belongs there.
+
+## What publishing an entity means
+
+The deployment's sync publishes every entity it introduces, which is what creates its
+backing storage — so a pushed entity is ready for data operations with no manual step.
+What matters is the consequence: a **published definition is additive-only**. A later
+push may add new fields and the mapping updates in place. Anything else — renaming a
+field, changing its type, switching table↔stream — is refused as an in-place update, and
+there are two ways forward:
+
+- **Un-publish and re-publish** from the portal's Entity Definitions page. This
+  **deletes the underlying index with all its data**. Fine while a model is still being
+  shaped and the data is throwaway; never do it to a user's real data without asking.
+- **A migration** — an explicit `ALTER TABLE` / `REINDEX` in `./migrations`, which is the
+  answer once data matters (see below).
+
+So the first shape an entity is pushed with is the cheap one to get right. Think the
+fields through before the first push rather than reshaping afterwards.
 
 ## Using repositories
 
 ```typescript
 import { Kinotic, Pageable } from '@kinotic-ai/core'
 import { PersistencePlugin } from '@kinotic-ai/persistence'
-import { PersonRepository } from '../repositories/PersonRepository.js'
+import { PersonRepository } from '@my-app/domain'
 
 Kinotic.use(PersistencePlugin)
 await Kinotic.connect()   // server + credentials resolve from the environment
@@ -94,6 +129,11 @@ const saved = await people.save({ id: null, firstName: 'Jane', lastName: 'Doe', 
 const page = await people.findAll(Pageable.create(0, 25))   // page.content, page.totalElements
 const hits = await people.search('Jane', Pageable.create(0, 10))  // matches @Text fields
 ```
+
+Repositories address the platform's `app-api` zone, which both application-scope and
+organization-scope connections may reach — so they work from a published service, a
+local script, and the browser alike. `Kinotic.use(PersistencePlugin)` is required before
+constructing one.
 
 Full surface: `save`, `bulkSave`, `update` (partial — only fields present change; an
 update of a missing entity upserts it, and an `@Version` entity must supply the
@@ -124,18 +164,18 @@ export class OrderRepository extends BaseOrderRepository {
 ```
 
 Only aggregates (COUNT, SUM, AVG, MIN, MAX) are supported today. Parameters bind by
-`:name`. A `Pageable` parameter, when used, should be first or last. Queries must be
-synchronized to the server (push) before they work at runtime.
+`:name`. A `Pageable` parameter, when used, should be first or last. A named query only
+works at runtime once its definition has reached the server, which the next push does.
 Docs: <https://kinotic.ai/apps/persistence/named-queries>.
 
 ## Migrations
 
 Schema changes beyond additive entity changes are explicit SQL files in `./migrations`,
-named `V<N>__<description>.sql` (e.g. `V2__add_status_index.sql`), executed in order
-and recorded so they never re-run. The dialect covers CREATE TABLE / DATA STREAM,
-COMPONENT and INDEX TEMPLATE, ALTER TABLE ADD COLUMN, REINDEX, INSERT, UPDATE, DELETE
-— including OBJECT / NESTED / UNION column types for structured fields. Two rules
-carry real weight:
+named `V<N>__<description>.sql` (e.g. `V2__add_status_index.sql`), applied in order by
+the deployment's `kinotic sync` step and recorded so they never re-run. The dialect
+covers CREATE TABLE / DATA STREAM, COMPONENT and INDEX TEMPLATE, ALTER TABLE ADD COLUMN,
+REINDEX, INSERT, UPDATE, DELETE — including OBJECT / NESTED / UNION column types for
+structured fields. Two rules carry real weight:
 
 - **Mappings are strict.** Storage mappings reject any field they do not know, failing
   the first save at runtime. Adding a field to an entity is handled by re-publishing
@@ -143,8 +183,21 @@ carry real weight:
   by a migration, every later entity field needs a matching `ALTER TABLE ADD COLUMN`.
   Non-additive changes (type change, rename, table→stream) always need an explicit
   migration plus `REINDEX` — the platform refuses them as in-place updates.
-- An `INSERT` that omits the logical `id` column stores the row under a random
-  document id, unreachable by `findById`.
+- **An `INSERT` must be addressed the way its readers will address it.** A row's document
+  id comes from the `id` column, so an `INSERT` whose column list omits `id` lands under a
+  generated id and is unreachable by `findById`. `WITH` options override both halves of
+  that, in any order:
+
+  ```sql
+  INSERT INTO products (id, organizationId, name)
+      VALUES ('widget', 'acme', 'Widget')
+      WITH REFRESH, ROUTING 'acme', DOCUMENT_ID 'acme-widget' ;
+  ```
+
+  `REFRESH` makes the row immediately searchable, `ROUTING '<value>'` places it on the
+  shard a routed read looks on (otherwise the row is routed by its `_id`), and
+  `DOCUMENT_ID '<value>'` sets the `_id` instead of taking it from the `id` column — which
+  a row read back under a composite id needs.
 
 Grammar: <https://kinotic.ai/apps/reference/migration-sql-grammar>.
 
