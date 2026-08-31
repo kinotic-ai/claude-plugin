@@ -95,32 +95,23 @@ skill).
 Only the `Base*` classes are regenerated; the `<Entity>Repository` subclass is created
 once and never overwritten, so custom code (like named queries) belongs there.
 
-## Publishing an entity — the step that is easy to miss
+## What publishing an entity means
 
-**A synchronized entity definition has no backing storage until it is published.** The
-deployment's sync runs without the CLI's `--publish` flag, so a pushed entity arrives as
-an *unpublished* definition: every repository call against it fails at runtime even
-though the deployment reports `RUNNING`. If a user's first `save()` or `findAll()` fails
-on a brand-new entity, this is almost always why.
+The deployment's sync publishes every entity it introduces, which is what creates its
+backing storage — so a pushed entity is ready for data operations with no manual step.
+What matters is the consequence: a **published definition is additive-only**. A later
+push may add new fields and the mapping updates in place. Anything else — renaming a
+field, changing its type, switching table↔stream — is refused as an in-place update, and
+there are two ways forward:
 
-Publishing is done by a person, in the portal: **Application → Project → Entity
-Definitions**, where each definition shows a `published` status and a publish action.
-Publishing creates the Elasticsearch index (or data stream, for `EntityType.STREAM`) from
-the definition's mapping. There is no MCP tool for it — tell the user to publish and wait
-for them to confirm rather than looking for a way around it.
-
-After publishing, the definition is **additive-only**: a later push may add new fields,
-and the mapping updates in place. Anything else — renaming a field, changing its type,
-switching table↔stream — is refused as an in-place update. The two ways forward:
-
-- **Un-publish and re-publish** — the portal offers it, and it **deletes the underlying
-  index with all its data**. Fine while a model is still being shaped and the data is
-  throwaway; never do it to a user's real data without asking.
+- **Un-publish and re-publish** from the portal's Entity Definitions page. This
+  **deletes the underlying index with all its data**. Fine while a model is still being
+  shaped and the data is throwaway; never do it to a user's real data without asking.
 - **A migration** — an explicit `ALTER TABLE` / `REINDEX` in `./migrations`, which is the
   answer once data matters (see below).
 
-Plan the entity's shape before publishing it. Getting the fields right on the first
-publish is much cheaper than either exit.
+So the first shape an entity is pushed with is the cheap one to get right. Think the
+fields through before the first push rather than reshaping afterwards.
 
 ## Using repositories
 

@@ -22,7 +22,7 @@ operations are ignored.
 
 | Artifact | Status |
 |---|---|
-| Entities and their generated repositories | Deployed — synchronized on every push |
+| Entities and their generated repositories | Deployed — synchronized and published on every push |
 | `packages/microservices/main/src/main.ts` | Deployed — run as the long-lived runtime |
 | Any other `packages/microservices/*` package | Built and type-checked, **never started** |
 | `packages/ui/*` | Built and type-checked, **not hosted** — no static site serving exists yet |
@@ -46,9 +46,10 @@ Each qualifying push runs one tracked job with three steps:
 2. **Sync project source** — a short-lived sandboxed VM fetches the pushed commit into
    the checkout (incremental, so installs stay warm), runs `bun install`, then
    `kinotic sync`, which regenerates from the entity sources, pushes the entity
-   definitions and named queries, and applies pending migrations from `./migrations`.
-   **This step is the build gate**: a commit that does not compile never reaches the
-   running services. Only after it fully succeeds does it write the reload sentinel.
+   definitions and named queries, publishes every entity it introduces (which creates
+   the backing storage), and applies pending migrations from `./migrations`. **This step
+   is the build gate**: a commit that does not compile never reaches the running
+   services. Only after it fully succeeds does it write the reload sentinel.
 3. **Ensure runtime workload** — the first deployment starts the long-lived VM that runs
    the microservice entry from the checkout (mounted read-only). Later deployments skip
    this: the running supervisor sees the sentinel and restarts the process onto the new
@@ -62,11 +63,6 @@ Consequences worth stating to a user:
 - Redelivering the same push is harmless — syncing a commit twice converges.
 - The runtime restarts your services as whole processes. There is no hot reload of a
   single class.
-- **The sync does not publish entity definitions.** A new entity reaches the server
-  unpublished, with no backing storage, and every repository call against it fails even
-  though the deployment says `RUNNING`. Someone has to publish it in the portal
-  (Application → Project → Entity Definitions) — see the `entities-and-persistence`
-  skill. This is the most common "the deploy succeeded but nothing works" cause.
 - **The build gate covers compilation, not the server's verdict on a definition.** A
   commit that does not compile fails the job; an entity or named-query the server then
   rejects is logged by the sync step and does not fail it. So a `RUNNING` deployment
@@ -109,10 +105,6 @@ default branch.
 the build gate: the pushed commit does not compile, or `kinotic sync` rejected an entity
 change. Reproduce it locally first — `bun install && bun run generate && bun run type-check`
 runs the same generation the sync step does — then fix and push again.
-
-A deployment that reports `RUNNING` while data operations fail is usually not a
-deployment problem at all — check that the entity definitions are published before
-digging further.
 
 Deployment logs are **not** reachable through MCP: `LogService` streams workload logs but
 is not exposed as a tool. Send the user to the portal for anything the status message
@@ -160,9 +152,8 @@ skill for the full table):
 
 So the working loop is: edit → `bun run generate` (when entities changed) → export from
 `packages/domain/index.ts` → `bun run type-check` → commit → push → `findDeployment`
-until `RUNNING` → publish any new entity definition in the portal. Verify behavior by
-calling the deployed service through a proxy from a local script or the frontend, not by
-trying to host it locally.
+until `RUNNING`. Verify behavior by calling the deployed service through a proxy from a
+local script or the frontend, not by trying to host it locally.
 
 A fully local stack (`deployment/docker-compose/` in the platform repository) is a
 platform-operator setup, not part of an application project's workflow.

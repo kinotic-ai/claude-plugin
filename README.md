@@ -73,9 +73,9 @@ Three consequences shape every skill in this plugin:
   started, and `packages/ui` is built but not hosted by the platform.
 - **Hosting a `@Publish` service requires organization scope**, which the portal's
   Machines page does not mint. Running your services means pushing.
-- **The sync does not publish entity definitions.** A new entity arrives with no backing
-  storage until a person publishes it in the portal, so repository calls fail against it
-  even on a `RUNNING` deployment.
+- **A published entity definition is additive-only.** The push publishes new entities and
+  creates their storage, but from then on only new fields apply in place — a rename or
+  type change needs a migration, or an un-publish that drops the index and its data.
 
 
 Kinotic OS mints MCP tool names as opaque base-36 hashes (≤ 25 chars of `[0-9a-z]`),
@@ -107,8 +107,8 @@ GitHub App installable, and a browser.
 5. `bun install`, `bun run generate` (with a first entity), export it from
    `packages/domain/index.ts`, `bun run type-check`, commit, push. Then poll
    `Project Service Find Deployment` until `status.type` is `RUNNING` on the pushed
-   `commitSha`, confirm the entity definitions arrived, publish the entity from the
-   portal's Entity Definitions page, and verify a `save()` then round-trips.
+   `commitSha`, confirm the entity definitions arrived published, and verify a `save()`
+   round-trips without any manual step.
 6. Push a commit that does not compile and verify the deployment reports `FAILED` with a
    reason while the previous commit keeps running.
 7. Spot-check skill triggering: "define a kinotic entity for orders" should load

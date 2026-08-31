@@ -192,18 +192,13 @@ are the source of truth.
    git so schema changes show up in diffs; never gitignore it). Never run
    `kinotic login` or `kinotic sync` yourself.
 5. **The push is the deployment.** A push to the default branch builds the project,
-   synchronizes the entity definitions, and starts (or reloads) the runtime that runs
-   `packages/microservices/main/src/main.ts`. Verify it landed with the tool titled
+   synchronizes and publishes the entity definitions, and starts (or reloads) the runtime
+   that runs `packages/microservices/main/src/main.ts`. Verify it landed with the tool titled
    `Project Service Find Deployment` (`{"projectId": "<project id>"}`) — poll until
    `status.type` is `RUNNING` with the pushed `commitSha`, and report a `FAILED`
    status's `message` to the user. Full workflow and failure handling: the `deploying`
-   skill.
-6. **Tell the user to publish the entity.** A synchronized entity definition has no
-   backing storage until someone publishes it in the portal (Application → Project →
-   **Entity Definitions** → publish). Until then every repository call fails, even with
-   the deployment `RUNNING`. There is no MCP tool for this — wait for the user to
-   confirm. Details and the additive-only rule that follows publication: the
-   `entities-and-persistence` skill.
+   skill. Publication is what creates the entity's storage, and it makes the definition
+   additive-only from then on — see `entities-and-persistence` before reshaping it.
 
 From here, hand off to the other kinotic skills: entity modeling and persistence →
 `entities-and-persistence`; business logic and APIs → `services`; UI and client
