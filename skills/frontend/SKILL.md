@@ -55,11 +55,23 @@ on its own.
 `KINOTIC_SERVER_HOST` in a `.env` does nothing for an SPA — the ladder skips straight
 from an explicit `server` option to `window.location`. That leaves exactly two shapes:
 
-**Same-origin — configure nothing.** The SPA is served from the gateway itself, or a dev
-server proxies to it. `window.location` is already the right answer, so a bare
-`Kinotic.connect()` is correct. A Vite dev proxy has to forward both the REST and the
-WebSocket paths, and `/v1` needs `ws: true` — that is the broker path the STOMP client
-opens:
+**Cross-origin — pass `server` explicitly.** This is the platform's path. A published UI
+is served from its own site host, not the gateway, and the deployment sets
+`VITE_KINOTIC_HOST`, `VITE_KINOTIC_PORT` and `VITE_KINOTIC_USE_SSL` for the build; `vite dev`
+takes the same three from the app's `.env` (next section). Left alone, the client would open
+a socket against the page's own origin, so `connect()` is handed a `server` built from those
+variables, and the REST calls are built from the same values and sent with
+`credentials: 'include'` so the session cookie travels. Recipe 1's `serverOptions()` /
+`apiUrl()` are that code; the platform's own consoles do the same in
+`@kinotic-ai/frontend-common`. Nothing is hand-set, and the code does not change between
+local and published.
+
+**Same-origin — configure nothing.** The alternative, for a UI served from the gateway's own
+webroot or from a dev server that proxies to it. `window.location` is already the right
+answer, so a bare `Kinotic.connect()` and bare REST paths
+(`fetch('/api/auth/me', { credentials: 'include' })`) are correct, and the three variables
+stay unset. A Vite dev proxy has to forward both the REST and the WebSocket paths, and `/v1`
+needs `ws: true` — that is the broker path the STOMP client opens:
 
 ```typescript
 // vite.config.ts
@@ -68,49 +80,6 @@ proxy: {
     '/v1':  { target: 'http://localhost:58503', changeOrigin: true, ws: true }
 }
 ```
-
-**Cross-origin — pass `server` explicitly.** The SPA runs on its own host (a framework
-dev server with no proxy, static hosting, any origin that is not the gateway). Left
-alone, the client would try to open a socket against the page's own origin. Build the
-override from your bundler's build vars and hand it to `connect()`:
-
-```typescript
-import { Kinotic } from '@kinotic-ai/core'
-import type { ServerInfo } from '@kinotic-ai/core'
-
-// Empty when no host is configured, so core falls back to the page's location and the
-// same build still works served same-origin.
-function serverOverrides(): Partial<ServerInfo> {
-    const host = import.meta.env.VITE_KINOTIC_HOST
-    if (!host) return {}
-    return {
-        host,
-        port: import.meta.env.VITE_KINOTIC_PORT ? parseInt(import.meta.env.VITE_KINOTIC_PORT) : 58503,
-        useSSL: import.meta.env.VITE_KINOTIC_USE_SSL === 'true' || window.location.protocol === 'https:'
-    }
-}
-
-await Kinotic.connect({ server: serverOverrides() })
-```
-
-The REST calls must reach the same server, so build their URLs from the same override —
-returning a bare path when none is set keeps the dev proxy and a same-origin deployment
-working — and send `credentials: 'include'` so the session cookie travels:
-
-```typescript
-function apiUrl(path: string): string {
-    const { host, port, useSSL } = serverOverrides()
-    return host ? `${useSSL ? 'https' : 'http'}://${host}:${port}${path}` : path
-}
-
-await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
-```
-
-This is the pattern the platform's own SPAs use (`serverOverrides()` / `apiUrl()` in
-`@kinotic-ai/frontend-common`). A published Kinotic UI is served from its own site host,
-not the gateway, so it is **cross-origin** — and the deployment sets `VITE_KINOTIC_HOST`,
-`VITE_KINOTIC_PORT` and `VITE_KINOTIC_USE_SSL` for the build, so the `serverOverrides()`
-shown just above works unchanged. Nothing is hand-set.
 
 Cross-origin does not push the SPA off the session cookie. The cookie is `SameSite=Lax`,
 which is sent whenever the API and the site share a site — as `api.kinotic.ai` and
@@ -131,8 +100,9 @@ the page on its own:
 | `VITE_KINOTIC_USE_SSL` | `true` or `false` | Whether to connect over TLS |
 
 A Vite project needs **no `vite.config.ts` changes** to be published — no `base`, no
-`define`. The deployment hands the build no base path and no commit, and the publish
-uploads `dist` under the site's root as it is.
+`define`. A UI on another build tool must pass the three through to the page itself. The
+deployment hands the build no base path and no commit, and the publish uploads `dist` under
+the site's root as it is.
 
 Declare the UI's ambient typing once, so `import.meta.env.VITE_KINOTIC_*` type-checks
 (Vite's `vite/client` types merge with it):
@@ -171,7 +141,10 @@ VITE_KINOTIC_PORT=58503
 VITE_KINOTIC_USE_SSL=false
 ```
 
-The code does not change between local and published.
+The code does not change between local and published. The gateway sets the session cookie
+`Secure` (it is a `__Host-` cookie), so signing in over plain `http://localhost` relies on
+the browser treating localhost as a secure context: Chrome and Firefox do; Safari does not
+store the cookie, and the upgrade after a `204` login arrives unauthenticated.
 
 Kinotic projects run on Bun, whose built-in WebSocket accepts the upgrade headers
 credentials travel on. Only a **Node** process sending credentials must first call
@@ -223,7 +196,7 @@ export function serverOptions(): ServerInfo {
         throw new Error('VITE_KINOTIC_HOST is not set: the build was not handed the platform address')
     }
     const useSSL = import.meta.env.VITE_KINOTIC_USE_SSL === 'true'
-    const port = parseInt(import.meta.env.VITE_KINOTIC_PORT ?? (useSSL ? '443' : '80'))
+    const port = parseInt(import.meta.env.VITE_KINOTIC_PORT || (useSSL ? '443' : '80'))
     return { host, port, useSSL }
 }
 
@@ -252,7 +225,8 @@ export async function login(email: string, password: string): Promise<void> {
 
 /**
  * Reconnects a returning tab: true when the browser still holds a live session and the
- * connection is open, false when the user must sign in.
+ * connection is open, false when the user must sign in. Rejects when the session is live
+ * but the connection cannot be opened, so a caller can tell the two apart.
  */
 export async function resume(): Promise<boolean> {
     const res = await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
@@ -289,11 +263,10 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
 ```
 
 One condition applies outside production. The cookie is `SameSite=Lax`, sent when the API
-and the site share a site — which production does. A developer whose API sits on a tunnel
-origin (ngrok) while the site is under `apps-<environment>.kinotic.ai` sets
-`kinotic.apiGateway.sessionCookieSameSite: NONE` in the server's local profile and runs the
-portal tunnel on current `develop`, where the Vite dev server no longer answers CORS
-preflights itself.
+and the site share a site — which production does. An environment whose API sits on a
+tunnel origin (ngrok) while the site is under `apps-<environment>.kinotic.ai` needs
+`kinotic.apiGateway.sessionCookieSameSite: NONE` in the server's profile, which sends the
+cookie from any origin the CORS pattern admits.
 
 ## Recipe 2 — Machine identity, zero ceremony (environment credentials)
 
