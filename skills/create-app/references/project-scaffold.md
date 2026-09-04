@@ -185,14 +185,15 @@ Two things make it a publishable UI rather than a library:
 
 1. Its `package.json` declares a **`build` script** and a `name` whose unscoped part is a
    valid label (lowercase letters, digits, interior dashes), unique among the project's UIs.
-2. Its build **honors `KINOTIC_UI_BASE_PATH`** (plus `KINOTIC_UI_COMMIT` and
-   `KINOTIC_UI_SERVER_URL`), and writes `dist/index.html`.
+2. Its build writes **`dist/index.html`** — a build that leaves none fails the deployment,
+   naming the UI.
 
-A UI whose build ignores the base path publishes assets under the commit while its index
-asks for them at the root, so the site loads and every asset 404s. Any framework that builds
-to static assets works; the full contract and a Vite config that satisfies it are in the
-`frontend` skill — write that config when creating the package, not after the first broken
-deploy.
+A Vite project needs no `vite.config.ts` changes to be publishable: the publish uploads
+`dist` under the site root as it is, and the deployment hands the build the three variables
+`VITE_KINOTIC_HOST`, `VITE_KINOTIC_PORT` and `VITE_KINOTIC_USE_SSL`, which Vite exposes to
+the page on its own. Any framework that builds to static assets works. The full contract,
+the ambient typing for those variables, and the browser sign-in module are in the
+`frontend` skill.
 
 ```jsonc
 // tsconfig.json — three levels up to the base config

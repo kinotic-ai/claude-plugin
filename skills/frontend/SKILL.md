@@ -3,12 +3,14 @@ name: frontend
 description: >
   How a frontend or Node client talks to a Kinotic application: how the UI resolves which
   server URL to connect to (same-origin vs an explicit server override, and the dev proxy
-  that makes them equivalent), Kinotic.connect, browser session-cookie authentication,
-  BasicCredentialsResolver and BearerCredentialsResolver, machine identities via
-  environment credentials, OIDC login, creating application users, and invoking published
-  services and entity repositories from the UI. Use when building a Kinotic app frontend
-  or SPA, working out what host or URL the UI should point at, wiring up login or
-  authentication, or connecting any client to a Kinotic server.
+  that makes them equivalent), Kinotic.connect, the three VITE_KINOTIC_* build variables
+  the deployment sets, browser sign-in through the gateway's login routes and the session
+  cookie it establishes, BasicCredentialsResolver and BearerCredentialsResolver for Bun
+  and Node clients, machine identities via environment credentials, OIDC login, creating
+  application users, and invoking published services and entity repositories from the UI.
+  Use when building a Kinotic app frontend or SPA, working out what host or URL the UI
+  should point at, wiring up login or authentication, or connecting any client to a
+  Kinotic server.
 ---
 
 # Frontends and Clients
@@ -20,8 +22,8 @@ live in `packages/ui` of the project scaffold and may use any framework that bui
 static assets. Docs: <https://kinotic.ai/apps/security/authentication>.
 
 A UI under `packages/ui` **is** built and published by the deployment and served at its own
-site — see "The UI build contract" below, which every UI must honor or it 404s on its own
-assets.
+site — see "The UI build contract" below for what the build is handed and what it must
+produce.
 
 Authentication happens at the **WebSocket upgrade**, and every authentication carries a
 scope. Application users always authenticate at APPLICATION scope — both
@@ -106,85 +108,70 @@ await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
 
 This is the pattern the platform's own SPAs use (`serverOverrides()` / `apiUrl()` in
 `@kinotic-ai/frontend-common`). A published Kinotic UI is served from its own site host,
-not the gateway, so it is **cross-origin** — and the deployment hands the build the address
-to use, so the override comes from `KINOTIC_UI_SERVER_URL` rather than a hand-set var. The
-next section is how.
+not the gateway, so it is **cross-origin** — and the deployment sets `VITE_KINOTIC_HOST`,
+`VITE_KINOTIC_PORT` and `VITE_KINOTIC_USE_SSL` for the build, so the `serverOverrides()`
+shown just above works unchanged. Nothing is hand-set.
 
-Session-cookie auth (Recipe 1) is origin-scoped, so a cross-origin SPA that cannot get
-the cookie sent needs a bearer token instead (Recipe 3). Same-origin, or a dev proxy that
-makes it look same-origin, is what keeps the cookie flow simple.
+Cross-origin does not push the SPA off the session cookie. The cookie is `SameSite=Lax`,
+which is sent whenever the API and the site share a site — as `api.kinotic.ai` and
+`apps.kinotic.ai` do in production. A published UI therefore uses the cookie flow
+(Recipe 1), cross-origin or not.
 
 ## The UI build contract
 
 Every UI package under `packages/ui` that declares a `build` script is built during the
-deployment with `bun run build` and published to its own site. The build is handed three
-variables, and **the build must honor them** — the platform does not rewrite the output:
+deployment with `bun run build` and published to its own site. The build is handed exactly
+three variables — the same three the platform's own consoles use — and Vite exposes them to
+the page on its own:
 
-| Variable | Value | What the build must do |
+| Variable | Value | What the UI does with it |
 |---|---|---|
-| `KINOTIC_UI_BASE_PATH` | `/<commit sha>/` | Set the bundler's base/public path. Assets are published under the commit and cached for a year |
-| `KINOTIC_UI_COMMIT` | the commit sha | Embed it, so a tab can tell when the site has moved on |
-| `KINOTIC_UI_SERVER_URL` | the platform's public API address | The address the UI connects to Kinotic on from the browser |
+| `VITE_KINOTIC_HOST` | e.g. `api.kinotic.ai` | The host the UI connects to Kinotic on from the browser |
+| `VITE_KINOTIC_PORT` | e.g. `443` | Its port |
+| `VITE_KINOTIC_USE_SSL` | `true` or `false` | Whether to connect over TLS |
 
-**Ignoring `KINOTIC_UI_BASE_PATH` is the failure to look for first.** A default Vite build
-emits `<script src="/assets/index-*.js">` while the publish uploads that file under
-`/<commit>/assets/…`, so the page loads and every asset 404s. A Vite config that satisfies
-all three:
+A Vite project needs **no `vite.config.ts` changes** to be published — no `base`, no
+`define`. The deployment hands the build no base path and no commit, and the publish
+uploads `dist` under the site's root as it is.
 
-```typescript
-import { defineConfig } from 'vite'
+Declare the UI's ambient typing once, so `import.meta.env.VITE_KINOTIC_*` type-checks
+(Vite's `vite/client` types merge with it):
 
-export default defineConfig({
-    // Published assets live under /<commit>/; without this the built index asks for
-    // /assets/... and 404s against the site.
-    base: process.env.KINOTIC_UI_BASE_PATH ?? '/',
-    define: {
-        __KINOTIC_UI_COMMIT__: JSON.stringify(process.env.KINOTIC_UI_COMMIT ?? 'dev'),
-        __KINOTIC_UI_SERVER_URL__: JSON.stringify(process.env.KINOTIC_UI_SERVER_URL ?? '')
-    }
-})
+```ts
+// src/vite-env.d.ts
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+    readonly VITE_KINOTIC_HOST?: string
+    readonly VITE_KINOTIC_PORT?: string
+    readonly VITE_KINOTIC_USE_SSL?: string
+}
 ```
 
-`define` is what carries the other two into client code — Vite only exposes `VITE_`-prefixed
-variables through `import.meta.env`, so a bare `import.meta.env.KINOTIC_UI_COMMIT` is
-`undefined`. Declare the injected constants for TypeScript
-(`declare const __KINOTIC_UI_COMMIT__: string`).
+Files under `assets/` carry Vite's content hash in their name and are cached for a year;
+everything else, `index.html` included, is never cached. A file outside `assets/` that
+changes between publishes is therefore safe.
 
-The server address then feeds the same override the cross-origin case above needs, with the
-defaults applying locally where the variable is unset:
-
-```typescript
-declare const __KINOTIC_UI_SERVER_URL__: string
-
-const configured = __KINOTIC_UI_SERVER_URL__ ? new URL(__KINOTIC_UI_SERVER_URL__) : null
-await Kinotic.connect(configured
-    ? { server: { host: configured.hostname,
-                  port: configured.port ? Number(configured.port) : null,
-                  useSSL: configured.protocol === 'https:' } }
-    : {})
-```
+Each site publishes `version.json` (`{ "commitSha": "<commit>" }`) next to `index.html`.
+The platform reads it to decide when a site is ready. A publish deletes the previous
+commit's files.
 
 A build that leaves no `dist/index.html` **fails the deployment**, naming the UI — so a UI
 whose build writes elsewhere never publishes.
 
-Each site also serves the commit it is running as `version.json` next to `index.html`, and a
-publish keeps the previous commit's assets so open tabs keep working. That is what
-`checkUiVersion` reads:
-
-```typescript
-import { checkUiVersion } from '@kinotic-ai/core'
-
-const { stale } = await checkUiVersion(__KINOTIC_UI_COMMIT__)
-if (stale) {
-    // the site now serves a newer commit — offer a reload
-}
-```
-
-It never rejects: a site whose `version.json` cannot be read leaves the tab not stale, so a
-network blip never prompts a reload.
-
 A package under `packages/ui` **without** a `build` script is treated as a library and is
 never published — that is how shared component packages live there.
+
+For `vite dev` on a developer's machine the same three variables go in the app's `.env`,
+pointing at the local server:
+
+```
+VITE_KINOTIC_HOST=localhost
+VITE_KINOTIC_PORT=58503
+VITE_KINOTIC_USE_SSL=false
+```
+
+The code does not change between local and published.
 
 Kinotic projects run on Bun, whose built-in WebSocket accepts the upgrade headers
 credentials travel on. Only a **Node** process sending credentials must first call
@@ -194,15 +181,119 @@ browser — do not add it to a Bun entry point.
 
 ## Recipe 1 — Browser SPA (session cookie)
 
-Same-origin only (see above). The browser logs in through the REST/OIDC flow first, which
-sets a session cookie; the WebSocket upgrade is then authenticated by the cookie and the
-host comes from the page's own origin — no configuration in JS at all:
+A browser **cannot** set WebSocket upgrade headers. `BasicCredentialsResolver` puts the
+credentials in upgrade headers, which only the Node and Bun sockets accept, so in a browser
+it produces an unauthenticated upgrade and `Max number of reconnection attempts reached`.
+In a browser the session cookie is the credential, and the gateway's login route
+establishes it.
 
-```typescript
-import { Kinotic } from '@kinotic-ai/core'
+- The app-scope password login is `POST /api/auth/app/:orgId/:appId/login` with
+  `{ email, password }`. It answers `204` and sets the cookie, or `4xx` with
+  `{ "error": "…" }`. The user must exist in **that application's** user base (portal,
+  Application → Members); the route does not authenticate organization members.
+- `GET /api/auth/me` answers `204` when the browser holds a live session and `401`
+  otherwise. `POST /api/auth/logout` ends the session.
+- Every request carries `credentials: 'include'`, and `Kinotic.connect` takes only the
+  server: the STOMP upgrade rides the cookie.
 
-await Kinotic.connect()
+```ts
+// src/kinotic/session.ts
+//
+// Sign-in for a Kinotic app UI. The deploy builds the UI with three variables naming the
+// platform it was published against, and Vite exposes them to the page on its own:
+//   VITE_KINOTIC_HOST     e.g. api.kinotic.ai
+//   VITE_KINOTIC_PORT     e.g. 443
+//   VITE_KINOTIC_USE_SSL  "true" | "false"
+// For `vite dev` on a laptop, put the same three in the app's .env, pointing at the local
+// server (localhost, 58503, false).
+//
+// A browser cannot set WebSocket upgrade headers, so credentials never go to Kinotic.connect
+// here. The gateway's login route establishes the session cookie, and the STOMP upgrade rides
+// that cookie; connect() takes only the server.
+
+import { Kinotic, type ServerInfo } from '@kinotic-ai/core'
+
+const ORGANIZATION_ID = 'my-organization'
+const APPLICATION_ID = 'my-application'
+
+/** The platform this UI was built against. */
+export function serverOptions(): ServerInfo {
+    const host = import.meta.env.VITE_KINOTIC_HOST
+    if (!host) {
+        throw new Error('VITE_KINOTIC_HOST is not set: the build was not handed the platform address')
+    }
+    const useSSL = import.meta.env.VITE_KINOTIC_USE_SSL === 'true'
+    const port = parseInt(import.meta.env.VITE_KINOTIC_PORT ?? (useSSL ? '443' : '80'))
+    return { host, port, useSSL }
+}
+
+/** Absolute URL of a gateway REST path on that platform. */
+export function apiUrl(path: string): string {
+    const { host, port, useSSL } = serverOptions()
+    return `${useSSL ? 'https' : 'http'}://${host}:${port}${path.startsWith('/') ? path : `/${path}`}`
+}
+
+/**
+ * Signs in with an application user's email and password, then opens the connection.
+ * Rejects with the gateway's message ("Invalid credentials" when it gives none).
+ */
+export async function login(email: string, password: string): Promise<void> {
+    const res = await fetch(apiUrl(`/api/auth/app/${ORGANIZATION_ID}/${APPLICATION_ID}/login`), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',            // stores the Set-Cookie from the API's origin
+        body: JSON.stringify({ email, password }),
+    })
+    if (!res.ok) {
+        throw new Error(await errorMessage(res, 'Invalid credentials'))
+    }
+    await connect()
+}
+
+/**
+ * Reconnects a returning tab: true when the browser still holds a live session and the
+ * connection is open, false when the user must sign in.
+ */
+export async function resume(): Promise<boolean> {
+    const res = await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
+    if (!res.ok) {
+        return false
+    }
+    await connect()
+    return true
+}
+
+/** Closes the connection and ends the browser session. */
+export async function logout(): Promise<void> {
+    await Kinotic.disconnect(true)
+    await fetch(apiUrl('/api/auth/logout'), { method: 'POST', credentials: 'include' })
+}
+
+async function connect(): Promise<void> {
+    await Kinotic.connect({
+        server: serverOptions(),
+        // bounded so a session the gateway no longer honors fails fast instead of retrying
+        // the upgrade forever with no feedback on the login button
+        maxConnectionAttempts: 3,
+    })
+}
+
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+    try {
+        const body = await res.json() as { error?: string }
+        return body.error ?? fallback
+    } catch {
+        return fallback
+    }
+}
 ```
+
+One condition applies outside production. The cookie is `SameSite=Lax`, sent when the API
+and the site share a site — which production does. A developer whose API sits on a tunnel
+origin (ngrok) while the site is under `apps-<environment>.kinotic.ai` sets
+`kinotic.apiGateway.sessionCookieSameSite: NONE` in the server's local profile and runs the
+portal tunnel on current `develop`, where the Vite dev server no longer answers CORS
+preflights itself.
 
 ## Recipe 2 — Machine identity, zero ceremony (environment credentials)
 
@@ -233,6 +324,10 @@ Do not borrow a project deployment's machine secret for this — rotating it cut
 running deployment off.
 
 ## Recipe 3 — explicit credentials in code
+
+For **Bun and Node clients** — scripts, tests, machines. Both resolvers below put the
+credentials in WebSocket upgrade headers, which a browser cannot send; a browser signs in
+through Recipe 1.
 
 Email/password (an application user):
 
