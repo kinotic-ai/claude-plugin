@@ -62,9 +62,8 @@ takes the same three from the app's `.env` (next section). Left alone, the clien
 a socket against the page's own origin, so `connect()` is handed a `server` built from those
 variables, and the REST calls are built from the same values and sent with
 `credentials: 'include'` so the session cookie travels. Recipe 1's `serverOptions()` /
-`apiUrl()` are that code; the platform's own consoles do the same in
-`@kinotic-ai/frontend-common`. Nothing is hand-set, and the code does not change between
-local and published.
+`apiUrl()` are that code, and the platform's own consoles connect the same way. Nothing is
+hand-set, and the code does not change between local and published.
 
 **Same-origin — configure nothing.** The alternative, for a UI served from the gateway's own
 webroot or from a dev server that proxies to it. `window.location` is already the right
