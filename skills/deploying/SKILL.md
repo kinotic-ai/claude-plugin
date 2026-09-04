@@ -22,19 +22,25 @@ operations are ignored.
 
 | Artifact | Status |
 |---|---|
-| Entities and their generated repositories | Deployed — synchronized and published on every push |
-| `packages/microservices/main/src/main.ts` | Deployed — run as the long-lived runtime |
-| Any other `packages/microservices/*` package | Built and type-checked, **never started** |
-| `packages/ui/*` | Built and type-checked, **not hosted** — no static site serving exists yet |
+| Entities and their generated repositories | Synchronized and published on every push |
+| Every directory under `packages/microservices` with a `package.json` | Gets its own long-lived runtime workload |
+| Every directory under `packages/ui` whose `package.json` declares a `build` script | Built with `bun run build` and published to its own site |
+| A `packages/ui` package with no `build` script | Treated as a library — never published |
 | Batch/scheduled jobs | Not implemented |
 
-The runtime workload runs exactly one entry file, `packages/microservices/main/src/main.ts`.
-Additional services belong in that process — instantiate them in `main.ts`, or in a
-module it imports. Do not scaffold a second microservice package expecting it to run.
+**Artifacts are discovered by where they sit and what their `package.json` says**, so
+adding one is adding a package — there is no registry to update:
 
-A frontend in `packages/ui` is a normal static build the user hosts wherever they like
-(or runs locally with their framework's dev server); it reaches the application over the
-same WebSocket gateway. Say this plainly rather than implying the platform will serve it.
+- A microservice is a directory directly under `packages/microservices` holding a
+  `package.json`. Its entry is that file's `main`, or `src/main.ts` when it declares none.
+  Each gets its own workload, so a second microservice really does run.
+- A UI is a directory directly under `packages/ui` whose `package.json` declares a `build`
+  script. It must honor the UI build contract (`frontend` skill) or it publishes assets
+  nothing can load.
+- An artifact's identity is the **unscoped part of its `package.json` name** (`@acme/orders`
+  is `orders`), which must be lowercase letters, digits, and interior dashes, and unique
+  among artifacts of its kind. The directory name never matters. A missing or invalid name,
+  or two artifacts of one kind sharing a name, fails the deployment naming the package.
 
 ## The deployment job
 
@@ -50,10 +56,12 @@ Each qualifying push runs one tracked job with three steps:
    the backing storage), and applies pending migrations from `./migrations`. **This step
    is the build gate**: a commit that does not compile never reaches the running
    services. Only after it fully succeeds does it write the reload sentinel.
-3. **Ensure runtime workload** — the first deployment starts the long-lived VM that runs
-   the microservice entry from the checkout (mounted read-only). Later deployments skip
-   this: the running supervisor sees the sentinel and restarts the process onto the new
-   commit, with escalating backoff if it crashes immediately.
+   The UIs are built in this step too, each with the three build variables, and a UI build
+   that writes no `dist/index.html` fails the deployment naming it.
+3. **Ensure runtime workloads** — every microservice of the commit ends with a workload
+   serving it, one per microservice: a new microservice gets a VM on its first appearance,
+   and a running one is kept, its supervisor restarting the process onto the new commit
+   with escalating backoff if it crashes immediately.
 
 Consequences worth stating to a user:
 
@@ -63,6 +71,9 @@ Consequences worth stating to a user:
 - Redelivering the same push is harmless — syncing a commit twice converges.
 - The runtime restarts your services as whole processes. There is no hot reload of a
   single class.
+- An artifact that disappears from a commit is marked **orphaned**, not deleted: its
+  workload keeps running and its site keeps serving. One that comes back is adopted rather
+  than re-provisioned. Removing it for real is a console action.
 - **The build gate covers compilation, not the server's verdict on a definition.** A
   commit that does not compile fails the job; an entity or named-query the server then
   rejects is logged by the sync step and does not fail it. So a `RUNNING` deployment
@@ -77,7 +88,7 @@ by title from the tool listing). It returns `null` when the project has never de
 
 ```json
 {
-  "id": "inventory-app-inventory-app",
+  "id": "inventory-app-main",
   "nodeId": "node-1",
   "commitSha": "9f2c1ab…",
   "runtimeWorkloadId": "wl-…",
