@@ -71,8 +71,8 @@ Three consequences shape every skill in this plugin:
 
 - **Artifacts are discovered from the tree.** Every package under `packages/microservices`
   gets its own runtime workload, and every one under `packages/ui` with a `build` script is
-  published as a site — a UI whose build ignores `KINOTIC_UI_BASE_PATH` 404s on its own
-  assets.
+  published as a site — its `dist` is uploaded under the site root as it is, and a build
+  leaving no `dist/index.html` fails the deployment.
 - **Hosting a `@Publish` service requires organization scope**, which the portal's
   Machines page does not mint. Running your services means pushing.
 - **A published entity definition is additive-only.** The push publishes new entities and
