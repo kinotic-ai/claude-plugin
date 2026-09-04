@@ -179,7 +179,8 @@ and must be edited by hand if a new workspace package is added.
 Each UI is its own workspace package under `packages/ui/` — the root workspace globs
 cover exactly that depth. Register it in `bunup.config.ts` and run `bun install` so the
 workspace links it. Any framework that builds to static assets works; the platform does
-not host the result (see the `deploying` skill).
+not host the result (see the `deploying` skill), which also makes the UI cross-origin
+with the gateway — how it resolves the server URL is in the `frontend` skill.
 
 ```jsonc
 // tsconfig.json — three levels up to the base config

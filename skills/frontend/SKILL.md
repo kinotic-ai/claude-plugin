@@ -1,11 +1,13 @@
 ---
 name: frontend
 description: >
-  How a frontend or Node client talks to a Kinotic application: Kinotic.connect,
-  browser session-cookie authentication, BasicCredentialsResolver and
-  BearerCredentialsResolver, machine identities via environment credentials, OIDC login,
-  creating application users, and invoking published services and entity repositories
-  from the UI. Use when building a Kinotic app frontend or SPA, wiring up login or
+  How a frontend or Node client talks to a Kinotic application: how the UI resolves which
+  server URL to connect to (same-origin vs an explicit server override, and the dev proxy
+  that makes them equivalent), Kinotic.connect, browser session-cookie authentication,
+  BasicCredentialsResolver and BearerCredentialsResolver, machine identities via
+  environment credentials, OIDC login, creating application users, and invoking published
+  services and entity repositories from the UI. Use when building a Kinotic app frontend
+  or SPA, working out what host or URL the UI should point at, wiring up login or
   authentication, or connecting any client to a Kinotic server.
 ---
 
@@ -38,8 +40,79 @@ skills).
 field is optional. Unset server fields resolve in order: explicit value →
 `KINOTIC_SERVER_HOST` / `KINOTIC_SERVER_PORT` / `KINOTIC_SERVER_USE_SSL` → the browser's
 own location → `https://api.kinotic.ai`. Credentials resolve through a resolver chain:
-the environment variables, then the browser session. A browser therefore needs no
-configuration at all, and a fully unconfigured client reaches Kinotic OS Cloud.
+the environment variables, then the browser session.
+
+## How the UI knows where the server is
+
+Answer this before writing any connect code — it decides whether the frontend needs
+configuration at all, and it is the question the resolution ladder above does not settle
+on its own.
+
+**The env-var rung does not exist in a browser.** Core reads it as
+`typeof process !== 'undefined' ? process.env : undefined`, and bundlers do not provide
+`process` in browser builds (Vite exposes `import.meta.env` instead). So putting
+`KINOTIC_SERVER_HOST` in a `.env` does nothing for an SPA — the ladder skips straight
+from an explicit `server` option to `window.location`. That leaves exactly two shapes:
+
+**Same-origin — configure nothing.** The SPA is served from the gateway itself, or a dev
+server proxies to it. `window.location` is already the right answer, so a bare
+`Kinotic.connect()` is correct. A Vite dev proxy has to forward both the REST and the
+WebSocket paths, and `/v1` needs `ws: true` — that is the broker path the STOMP client
+opens:
+
+```typescript
+// vite.config.ts
+proxy: {
+    '/api': { target: 'http://localhost:58503', changeOrigin: true },
+    '/v1':  { target: 'http://localhost:58503', changeOrigin: true, ws: true }
+}
+```
+
+**Cross-origin — pass `server` explicitly.** The SPA runs on its own host (a framework
+dev server with no proxy, static hosting, any origin that is not the gateway). Left
+alone, the client would try to open a socket against the page's own origin. Build the
+override from your bundler's build vars and hand it to `connect()`:
+
+```typescript
+import { Kinotic } from '@kinotic-ai/core'
+import type { ServerInfo } from '@kinotic-ai/core'
+
+// Empty when no host is configured, so core falls back to the page's location and the
+// same build still works served same-origin.
+function serverOverrides(): Partial<ServerInfo> {
+    const host = import.meta.env.VITE_KINOTIC_HOST
+    if (!host) return {}
+    return {
+        host,
+        port: import.meta.env.VITE_KINOTIC_PORT ? parseInt(import.meta.env.VITE_KINOTIC_PORT) : 58503,
+        useSSL: import.meta.env.VITE_KINOTIC_USE_SSL === 'true' || window.location.protocol === 'https:'
+    }
+}
+
+await Kinotic.connect({ server: serverOverrides() })
+```
+
+The REST calls must reach the same server, so build their URLs from the same override —
+returning a bare path when none is set keeps the dev proxy and a same-origin deployment
+working — and send `credentials: 'include'` so the session cookie travels:
+
+```typescript
+function apiUrl(path: string): string {
+    const { host, port, useSSL } = serverOverrides()
+    return host ? `${useSSL ? 'https' : 'http'}://${host}:${port}${path}` : path
+}
+
+await fetch(apiUrl('/api/auth/me'), { credentials: 'include' })
+```
+
+This is the pattern the platform's own SPAs use (`serverOverrides()` / `apiUrl()` in
+`@kinotic-ai/frontend-common`). Since the platform does not host frontends, a deployed
+Kinotic app's UI is cross-origin by default — assume the explicit form unless the user
+is serving the SPA from the gateway or proxying to it.
+
+Session-cookie auth (Recipe 1) is origin-scoped, so a cross-origin SPA that cannot get
+the cookie sent needs a bearer token instead (Recipe 3). Same-origin, or a dev proxy that
+makes it look same-origin, is what keeps the cookie flow simple.
 
 Kinotic projects run on Bun, whose built-in WebSocket accepts the upgrade headers
 credentials travel on. Only a **Node** process sending credentials must first call
@@ -49,9 +122,9 @@ browser — do not add it to a Bun entry point.
 
 ## Recipe 1 — Browser SPA (session cookie)
 
-The browser logs in through the REST/OIDC flow first, which sets a session cookie; the
-WebSocket upgrade is then authenticated by the cookie and the host comes from the
-page's own origin — no configuration in JS at all:
+Same-origin only (see above). The browser logs in through the REST/OIDC flow first, which
+sets a session cookie; the WebSocket upgrade is then authenticated by the cookie and the
+host comes from the page's own origin — no configuration in JS at all:
 
 ```typescript
 import { Kinotic } from '@kinotic-ai/core'
