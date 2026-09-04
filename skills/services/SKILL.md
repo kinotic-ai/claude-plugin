@@ -51,8 +51,7 @@ So an application-scope identity — an app end-user, or a machine created on an
 application's Machines page — can call services and use entity repositories, but can
 never host one. The deployment provisions its runtime workload an organization-scope
 machine identity for exactly this reason, which is why **pushing is how you run your
-services** (see the `deploying` skill). Source: `ZoneRules.from(Participant)` in
-`kinotic-domain`.
+services** (see the `deploying` skill).
 
 ## The entry point
 

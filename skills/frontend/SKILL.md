@@ -343,8 +343,19 @@ For OIDC:
    (Kinotic MCP tool names are opaque hashes — always resolve by title from the tool
    listing). An empty result means no provider is wired up yet — tell the user rather
    than writing login code against a provider that will reject it.
-2. The frontend runs the OAuth flow; the REST login establishes the session cookie;
-   then connect as in Recipe 1.
+2. The frontend drives it through the same login handler Recipe 1's password route
+   lives on, so the sign-in page is email-first:
+   - `GET /api/auth/app/:orgId/:appId/login/providers` lists the providers enabled for
+     the application, for a "sign in with …" button per provider.
+   - `POST /api/auth/app/:orgId/:appId/login/lookup` with `{ email }` answers
+     `{ "type": "sso", "redirect": "…" }` when that email is an OIDC user with a live
+     provider — send the browser to `redirect` — or `{ "type": "password" }`, in which
+     case show the password field and call Recipe 1's `login()`.
+   - The provider returns the browser to
+     `GET /api/auth/app/:orgId/:appId/login/oidc/callback/:configId`, which completes
+     the login and sets the session cookie, then lands back on the site.
+   Once the tab is back, Recipe 1's `resume()` sees the live session and opens the
+   connection. Every call carries `credentials: 'include'`, as in Recipe 1.
 
 ## Calling services from the frontend
 

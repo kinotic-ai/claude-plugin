@@ -31,18 +31,22 @@ Code bugs: anthropics/claude-code#51573, #51538).
 To work against a different Kinotic OS (staging, self-hosted, local), add that
 endpoint as its own MCP server alongside the plugin:
 
-- **Claude Code** — `claude mcp add --transport http kinotic-os-test <your endpoint URL>`
+- **Claude Code** — `claude mcp add -s user --transport http kinotic-os-test <your endpoint URL>`.
+  Without `-s user` the server binds to the directory the command ran in and is absent
+  everywhere else, while a later add from another directory reports "already exists".
 - **Claude desktop app** — Settings → Connectors → Add custom connector (`https` only)
 
 The skills resolve the Kinotic OS tools by title from the tool listing, so they work
 the same through a manually added server. Two server-side settings gate a non-cloud
-server: it must list the Claude client-metadata URL in
+server — whoever runs that server sets them; on Kinotic Cloud they are already in
+place: it must list the Claude client-metadata URL in
 `kinotic.domain.oauth.allowedClientIds` (there is no dynamic client registration),
 and when its OAuth surface is reached at a different host than the browser uses
 (localhost behind a tunnel), it must set `kinotic.domain.oauth.issuerBaseUrl` —
 missing either makes `/mcp` OAuth fail as if the server never appeared.
 
-After installing, run `/mcp`, select `kinotic-os`, and authenticate. The browser opens
+After installing, run `/mcp`, select the Kinotic OS server (`kinotic-os`, or the name
+you gave a manually added one such as `kinotic-os-test`), and authenticate. The browser opens
 the Kinotic OS OAuth flow — sign up from the login page if you have no account, then
 approve the consent screen. Claude Code stores and refreshes the token automatically.
 
@@ -91,10 +95,10 @@ Requires a running Kinotic OS (`kinotic-server`), a test GitHub org with the Kin
 GitHub App installable, and a browser.
 
 1. Add the local server alongside the plugin:
-   `claude mcp add --transport http kinotic-os-test http://localhost:58503/mcp`
+   `claude mcp add -s user --transport http kinotic-os-test http://localhost:58503/mcp`
    (a localhost server needs `kinotic.domain.oauth.issuerBaseUrl` + an
    `allowedClientIds` entry for the OAuth flow to complete).
-2. `/mcp` → `kinotic-os` → complete the OAuth flow, including one pass as a brand-new
+2. `/mcp` → `kinotic-os-test` → complete the OAuth flow, including one pass as a brand-new
    signup.
 3. Ask Claude to create an app (or run `/kinotic:new-app TestApp`):
    - Application and Project created; correct ids recorded.
