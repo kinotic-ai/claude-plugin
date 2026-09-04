@@ -261,9 +261,10 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
 }
 ```
 
-One condition applies outside production. The cookie is `SameSite=Lax`, sent when the API
-and the site share a site — which production does. An environment whose API sits on a
-tunnel origin (ngrok) while the site is under `apps-<environment>.kinotic.ai` needs
+One condition applies only to a **self-hosted** server; on Kinotic Cloud it is already
+settled. The cookie is `SameSite=Lax`, sent when the API and the site share a site — which
+the hosted platform does. A self-hosted environment whose API sits on a different site from
+its published UIs (a tunnel origin such as ngrok, say) needs
 `kinotic.apiGateway.sessionCookieSameSite: NONE` in the server's profile, which sends the
 cookie from any origin the CORS pattern admits.
 
