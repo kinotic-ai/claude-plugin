@@ -198,7 +198,7 @@ have access to it.
 
 Compare the cloned repository against `references/project-scaffold.md`. In short: a Bun
 workspace with `packages/domain`, `packages/microservices/main`, `packages/ui`, and a
-`.config/kinotic.config.ts` whose `organizationId` and `applicationId` match Step 1.
+`.config/kinotic.config.ts` whose `organizationId` and `applicationId` match Step 1 and whose `projectId` matches Step 2.
 
 Run `bun install`, then `bun run type-check`. Check which `@kinotic-ai/*` versions
 actually resolved (`bun pm ls | grep @kinotic-ai`) — the current SDK line is `5.x`

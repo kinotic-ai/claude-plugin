@@ -91,6 +91,7 @@ import type { KinoticProjectConfig } from '@kinotic-ai/management-api'
 const config: KinoticProjectConfig = {
   organizationId: "<organization id>",
   applicationId: "<application id>",
+  projectId: "<project id>",
   entitiesPaths: [
     {
       path: "packages/domain/model",
@@ -106,8 +107,10 @@ export default config
 ```
 
 - `organizationId` and `applicationId` must match the Application created through the
-  MCP tools (Step 1 of the workflow). If they differ, synchronization will target the
-  wrong application — surface this to the user before pushing.
+  MCP tools (Step 1 of the workflow), and `projectId` the Project created in Step 2
+  (`<application id>-main`). If they differ, synchronization targets the wrong
+  application or fails because the project does not exist — surface this to the user
+  before pushing.
 - `entitiesPaths[].path` is where `@Entity` classes are discovered;
   `repositoryPath` is where repository classes are generated. Trust the values in the
   cloned config over the ones shown here.
