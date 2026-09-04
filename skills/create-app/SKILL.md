@@ -15,8 +15,8 @@ Follow these steps in order. Exact MCP tool contracts (argument and result JSON 
 error strings) are in `references/mcp-tools.md`. The expected repository layout is in
 `references/project-scaffold.md`.
 
-An application holds one or more projects; the workflow below creates the first one,
-scaffolded as a Bun-workspace mono repo. The project's GitHub repository is created by
+An application holds one or more projects; the workflow below creates its default `main`
+project, scaffolded as a Bun-workspace mono repo. The project's GitHub repository is created by
 Kinotic OS — never create the repository yourself.
 
 **MCP tool names are opaque hashes.** Resolve every Kinotic OS tool from the tool
@@ -85,29 +85,59 @@ appeared" after OAuth.
    Any human-readable name works — the server slugifies it into the application id. It
    is rejected only when blank, all punctuation, or slugifying to the platform-reserved
    id `system-api`.
-2. Call the tool titled `Application Service Create Application If Not Exist` with
+2. **Settle whether users share data.** Applications default to one shared dataset:
+   every user of the app sees every other user's rows. That is right for a team tool
+   (shared inventory, a group dashboard) and wrong for anything personal (a todo list,
+   notes, per-customer records), where it silently exposes each user's data to all the
+   others. Do not infer it from the app's name — ask, in plain terms:
+
+   > Should each user see only their own data, or should everyone in the app share one
+   > set of data? For something like a personal todo list you want per-user isolation;
+   > for a shared team workspace you want the shared one.
+
+   Per-user isolation needs two settings that must agree — `tenantPerUser` on the
+   Application, and `@Entity(MultiTenancyType.SHARED)` with a `@TenantId` field on each
+   entity (the `entities-and-persistence` skill has the full table). Neither works alone.
+
+   `Application Service Create Application If Not Exist` cannot set `tenantPerUser`; the
+   application is created with it `false`. When the user wants per-user isolation, tell
+   them to enable it in the portal (**Application → Settings → Tenant per user**) and
+   confirm before anyone signs into the app — the flag only assigns a tenant to users
+   created *after* it is enabled, existing users are never backfilled, and those users
+   then fail every write to a tenant-scoped entity.
+3. Call the tool titled `Application Service Create Application If Not Exist` with
    `{"name": ..., "description": ...}`. The call is idempotent — if the application
    already exists it is returned unchanged.
-3. From the result, record `id` (the server-minted slug of the name, e.g.
+4. From the result, record `id` (the server-minted slug of the name, e.g.
    `Inventory App` → `inventory-app`) and `organizationId`. Both are needed in Step 2.
+   The result's `tenantPerUser` confirms what the application was created with.
 
 ## Step 2 — Create the Project (provisions the GitHub repository)
 
+Every application gets a **`main` project** by default — do not ask the user to name it.
 Call the tool titled `Project Service Create Project If Not Exist`. The single argument
 key is exactly `project`:
 
 ```json
 {
   "project": {
+    "id": "<application id from Step 1>-main",
     "applicationId": "<application id from Step 1>",
     "organizationId": "<organizationId from Step 1>",
-    "name": "<project name — reuse the application name unless the user wants otherwise>",
+    "name": "<the application name>",
     "description": "<project description>",
     "repoPrivate": true,
     "sourceOfTruth": "TYPESCRIPT"
   }
 }
 ```
+
+Setting `id` explicitly is what makes it the `main` project: left unset the server derives
+`<applicationId>-<slugified name>`, giving the doubled `inventory-app-inventory-app`.
+**Do not put `main` in `name`** — the GitHub repository is named after the slugified
+project name, so a project named `main` produces a repo called `main`, and the second
+application in the same GitHub account then collides with it. The name carries the app's
+identity for the repo; the id carries the `main` convention.
 
 `organizationId` is required — the server rejects a project without it. Creation
 provisions a GitHub repository from the Kinotic template through the organization's

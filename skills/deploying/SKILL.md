@@ -77,7 +77,7 @@ by title from the tool listing). It returns `null` when the project has never de
 
 ```json
 {
-  "id": "inventory-app-inventory-app",
+  "id": "inventory-app-main",
   "nodeId": "node-1",
   "commitSha": "9f2c1ab…",
   "runtimeWorkloadId": "wl-…",

@@ -71,6 +71,13 @@ Any human-readable `name` works — the server slugifies it into the id (lowerca
 letters, digits, interior dashes). It fails only when the name is blank, slugifies to
 nothing (all punctuation), or slugifies to the platform-reserved id `system-api`.
 
+There is no `tenantPerUser` argument: an application is always created with it `false`,
+meaning all users share one dataset. Changing it is a portal action (Application →
+Settings → **Tenant per user**), and it only assigns tenants to users created afterwards
+— so it is settled before anyone signs in, not later. `Application Service Save` can also
+write it, but it replaces the whole document and is `destructiveHint: true`; prefer the
+portal.
+
 Result (Application):
 
 ```json
@@ -84,6 +91,9 @@ Result (Application):
   "updated": 1753747200000
 }
 ```
+
+`tenantPerUser: false` is the shared-data default — confirm it matches what the user
+asked for before continuing.
 
 `id` is the server-minted slug of `name`. `organizationId` is derived from the
 authenticated user — pass both into project creation.
@@ -116,6 +126,7 @@ The single argument key is exactly `project`:
 ```json
 {
   "project": {
+    "id": "inventory-app-main",
     "applicationId": "inventory-app",
     "organizationId": "acme",
     "name": "Inventory App",
@@ -126,8 +137,12 @@ The single argument key is exactly `project`:
 }
 ```
 
-- `applicationId` and `name` are required; the project id is derived as
-  `<applicationId>-<slugified name>` when not set (e.g. `inventory-app-inventory-app`).
+- `applicationId` and `name` are required. A supplied `id` is used as given; left unset
+  the server derives `<applicationId>-<slugified name>` (`inventory-app-inventory-app`).
+  Pass `<applicationId>-main` so an application's default project is its `main` project.
+- `name` must stay the application's name, not `main`: the GitHub repo is named from the
+  slugified **name**, so naming the project `main` creates a repo called `main` that the
+  next application in the same account collides with.
 - `organizationId` is **required**, not just constrained: omitting it fails with
   `Organization id must be set on Project`, and a mismatch fails with
   `Cannot save Project with organizationId '<x>' while authenticated as organization '<y>'`.
@@ -141,7 +156,7 @@ Result (Project) — fields beyond the input:
 
 ```json
 {
-  "id": "inventory-app-inventory-app",
+  "id": "inventory-app-main",
   "repoFullName": "acme-gh-org/inventory-app",
   "repoId": 123456789,
   "repoDefaultBranch": "main",
@@ -174,7 +189,7 @@ is read-your-write consistent, so the returned project reflects the outcome.
 Arguments:
 
 ```json
-{ "projectId": "inventory-app-inventory-app" }
+{ "projectId": "inventory-app-main" }
 ```
 
 Errors:
@@ -198,18 +213,18 @@ is verified; see the `deploying` skill for the whole workflow.
 Arguments:
 
 ```json
-{ "projectId": "inventory-app-inventory-app" }
+{ "projectId": "inventory-app-main" }
 ```
 
 Result (ProjectDeployment), `id` always equal to the project id:
 
 ```json
 {
-  "id": "inventory-app-inventory-app",
+  "id": "inventory-app-main",
   "organizationId": "acme",
   "applicationId": "inventory-app",
   "nodeId": "node-1",
-  "hostDir": "<node workload data dir>/projects/inventory-app-inventory-app",
+  "hostDir": "<node workload data dir>/projects/inventory-app-main",
   "runtimeWorkloadId": "wl-…",
   "syncMachineIdentityId": "…",
   "runtimeMachineIdentityId": "…",

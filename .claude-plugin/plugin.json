@@ -1,6 +1,6 @@
 {
   "name": "kinotic",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Build Kinotic applications with Claude: onboard onto Kinotic OS, create apps and projects through the Kinotic MCP server, and develop, deploy, and run entities, services, and frontends",
   "author": {
     "name": "Kinotic AI",
