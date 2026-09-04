@@ -54,7 +54,7 @@ approve the consent screen. Claude Code stores and refreshes the token automatic
 | `create-app` skill | End-to-end onboarding: sign up or sign in to Kinotic OS, create the Application and its first Project, handle GitHub linking and repo provisioning, clone, verify the scaffold, first entity and first push |
 | `entities-and-persistence` skill | Entity classes and decorators, `bun run generate`, repository API, named queries, migrations, multi-tenancy |
 | `services` skill | Publishing services with `@Publish`, zones and addressing, the organization scope a service host needs, service proxies, streaming |
-| `frontend` skill | Connecting browser and Node clients, authentication recipes, application users and OIDC, calling services from the UI |
+| `frontend` skill | How the UI resolves the server URL, the UI build contract every published UI must honor, connecting browser and Node clients, authentication recipes, application users and OIDC, calling services from the UI |
 | `deploying` skill | Push-to-deploy: what the platform actually runs, the deployment job, checking status with `Project Service Find Deployment`, diagnosing failures, machine identities, what can be run locally |
 | `/kinotic:new-app` command | Deterministic entry point that runs the create-app workflow |
 
@@ -62,15 +62,17 @@ approve the consent screen. Claude Code stores and refreshes the token automatic
 
 A push to the project repository's default branch is the whole pipeline. The deployment
 runs a sandboxed build VM that checks the commit out, installs, and runs `kinotic sync`
-(which regenerates from the entity sources, pushes the entity definitions and named
-queries, and applies migrations), then starts or reloads a long-lived VM running
-`packages/microservices/main/src/main.ts`. A commit that does not compile fails the build
+(which regenerates from the entity sources, pushes and publishes the entity definitions and
+named queries, and applies migrations), builds and publishes every UI, then leaves every
+microservice of the commit with a running VM. A commit that does not compile fails the build
 and never reaches the running services.
 
 Three consequences shape every skill in this plugin:
 
-- **Only that one entry file is run.** Extra microservice packages are built but never
-  started, and `packages/ui` is built but not hosted by the platform.
+- **Artifacts are discovered from the tree.** Every package under `packages/microservices`
+  gets its own runtime workload, and every one under `packages/ui` with a `build` script is
+  published as a site — a UI whose build ignores `KINOTIC_UI_BASE_PATH` 404s on its own
+  assets.
 - **Hosting a `@Publish` service requires organization scope**, which the portal's
   Machines page does not mint. Running your services means pushing.
 - **A published entity definition is additive-only.** The push publishes new entities and

@@ -64,19 +64,23 @@ Idempotent.
 Arguments:
 
 ```json
-{ "name": "Inventory App", "description": "Tracks warehouse inventory" }
+{ "name": "Inventory App", "description": "Tracks warehouse inventory", "tenantPerUser": false }
 ```
 
 Any human-readable `name` works — the server slugifies it into the id (lowercase
 letters, digits, interior dashes). It fails only when the name is blank, slugifies to
 nothing (all punctuation), or slugifies to the platform-reserved id `system-api`.
 
-There is no `tenantPerUser` argument: an application is always created with it `false`,
-meaning all users share one dataset. Changing it is a portal action (Application →
-Settings → **Tenant per user**), and it only assigns tenants to users created afterwards
-— so it is settled before anyone signs in, not later. `Application Service Save` can also
-write it, but it replaces the whole document and is `destructiveHint: true`; prefer the
-portal.
+`tenantPerUser` decides whether each user of the application gets an isolated tenant
+(`true`) or every user shares one dataset (`false`) — see the create-app workflow for
+choosing it, and the entities-and-persistence skill for the entity side that must agree.
+
+It applies **only when the application is created**. An idempotent call that returns an
+existing application returns it with the `tenantPerUser` it already had; the argument is
+ignored. Changing it afterwards is a portal action (Application → Settings → **Tenant per
+user**) and only assigns tenants to users created from then on, so it is settled before the
+application has users. `Application Service Save` can also write it, but it replaces the
+whole document and is `destructiveHint: true`; prefer the portal.
 
 Result (Application):
 

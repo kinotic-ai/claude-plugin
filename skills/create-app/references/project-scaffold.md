@@ -27,8 +27,8 @@ report the difference to the user, and do not "fix" the clone to match this docu
     │   ├── model/            # @Entity classes go here
     │   └── repositories/     # `bun run generate` writes repository classes here
     ├── microservices/
-    │   └── main/             # THE deployed entry point (packages/microservices/main/src/main.ts)
-    └── ui/                   # frontend packages (built, but not hosted by the platform)
+    │   └── main/             # the starter microservice; each package here gets its own workload
+    └── ui/                   # UI packages; each one with a build script is published as a site
 ```
 
 `packages/domain/model`, `packages/domain/repositories`, and `packages/ui` ship as empty
@@ -133,8 +133,9 @@ Kinotic.zonePrefix = appZone(config.organizationId, config.applicationId)
 await Kinotic.connect()
 ```
 
-Add services to this process. A second package under `packages/microservices/` is built
-and type-checked but never started — see the `deploying` skill.
+Add services here, or add a sibling package under `packages/microservices/` — each package
+there gets its own runtime workload, with its entry taken from its `package.json` `main`
+(default `src/main.ts`). See the `deploying` skill.
 
 Its `package.json` depends on the domain package plus the catalog entries, and pins the
 OpenTelemetry packages its tracing bootstrap uses:
@@ -176,11 +177,22 @@ and must be edited by hand if a new workspace package is added.
 
 ## Adding a UI package
 
-Each UI is its own workspace package under `packages/ui/` — the root workspace globs
-cover exactly that depth. Register it in `bunup.config.ts` and run `bun install` so the
-workspace links it. Any framework that builds to static assets works; the platform does
-not host the result (see the `deploying` skill), which also makes the UI cross-origin
-with the gateway — how it resolves the server URL is in the `frontend` skill.
+The template ships `packages/ui/` empty, so a UI is created from scratch. Each one is its
+own workspace package under `packages/ui/` — the root workspace globs cover exactly that
+depth. Register it in `bunup.config.ts` and run `bun install` so the workspace links it.
+
+Two things make it a publishable UI rather than a library:
+
+1. Its `package.json` declares a **`build` script** and a `name` whose unscoped part is a
+   valid label (lowercase letters, digits, interior dashes), unique among the project's UIs.
+2. Its build **honors `KINOTIC_UI_BASE_PATH`** (plus `KINOTIC_UI_COMMIT` and
+   `KINOTIC_UI_SERVER_URL`), and writes `dist/index.html`.
+
+A UI whose build ignores the base path publishes assets under the commit while its index
+asks for them at the root, so the site loads and every asset 404s. Any framework that builds
+to static assets works; the full contract and a Vite config that satisfies it are in the
+`frontend` skill — write that config when creating the package, not after the first broken
+deploy.
 
 ```jsonc
 // tsconfig.json — three levels up to the base config

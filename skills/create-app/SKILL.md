@@ -99,15 +99,14 @@ appeared" after OAuth.
    Application, and `@Entity(MultiTenancyType.SHARED)` with a `@TenantId` field on each
    entity (the `entities-and-persistence` skill has the full table). Neither works alone.
 
-   `Application Service Create Application If Not Exist` cannot set `tenantPerUser`; the
-   application is created with it `false`. When the user wants per-user isolation, tell
-   them to enable it in the portal (**Application → Settings → Tenant per user**) and
-   confirm before anyone signs into the app — the flag only assigns a tenant to users
-   created *after* it is enabled, existing users are never backfilled, and those users
-   then fail every write to a tenant-scoped entity.
 3. Call the tool titled `Application Service Create Application If Not Exist` with
-   `{"name": ..., "description": ...}`. The call is idempotent — if the application
-   already exists it is returned unchanged.
+   `{"name": ..., "description": ..., "tenantPerUser": true|false}`, passing the answer
+   from the previous step. The call is idempotent — if the application already exists it is
+   returned unchanged, **including its existing `tenantPerUser`**: the argument only applies
+   when the application is created, because flipping it later would split the users into
+   tenanted and untenanted halves. An application that already exists with the wrong setting
+   is changed in the portal (**Application → Settings → Tenant per user**), and only while
+   it still has no users.
 4. From the result, record `id` (the server-minted slug of the name, e.g.
    `Inventory App` → `inventory-app`) and `organizationId`. Both are needed in Step 2.
    The result's `tenantPerUser` confirms what the application was created with.
