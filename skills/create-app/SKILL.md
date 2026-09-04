@@ -31,8 +31,10 @@ titles starting with `Application Service` / `Project Service` (e.g.
 `Application Service Create Application If Not Exist`). If they are present, the user
 is already connected — skip to Step 1.
 
-If the tools are missing, the user has not authenticated the `kinotic-os` MCP server
-yet. Ask whether they already have a Kinotic OS account, then walk them through the
+If the tools are missing, the user has not authenticated the Kinotic OS MCP server
+yet. In `/mcp` it is listed as `kinotic-os` when the plugin's own entry is used, or
+under the name given to a manually added server (`kinotic-os-test` in the README's
+example) — the steps below say `kinotic-os`; substitute that name. Ask whether they already have a Kinotic OS account, then walk them through the
 matching path — the whole flow happens in their browser, so narrate what they will see:
 
 1. Tell the user to run `/mcp`, select `kinotic-os`, and authenticate. A browser opens
@@ -71,13 +73,14 @@ The user can review or revoke this connection later under **Account → Connecte
 in the portal.
 
 **Other servers.** A staging, self-hosted, or local Kinotic OS is added as its own MCP
-server: `claude mcp add --transport http kinotic-os-test <url>` — the tools work the
-same from either. Two server-side settings gate this: the server must list Claude
-Code's client-metadata URL in `kinotic.domain.oauth.allowedClientIds` (there is no
-dynamic client registration), and a server whose OAuth surface is reached at a
-different host than the browser uses (e.g. localhost behind a tunnel) must set
-`kinotic.domain.oauth.issuerBaseUrl`. Missing either looks like "the server never
-appeared" after OAuth.
+server: `claude mcp add -s user --transport http kinotic-os-test <url>` (`-s user` so it
+follows the user into every project directory) — the tools work the same from either.
+Two settings on that server gate this, set by whoever runs it (Kinotic Cloud has them
+in place): the server must list Claude Code's client-metadata URL in
+`kinotic.domain.oauth.allowedClientIds` (there is no dynamic client registration), and
+a server whose OAuth surface is reached at a different host than the browser uses
+(e.g. localhost behind a tunnel) must set `kinotic.domain.oauth.issuerBaseUrl`.
+Missing either looks like "the server never appeared" after OAuth.
 
 ## Step 1 — Create the Application
 
