@@ -22,11 +22,12 @@ For local development, add the marketplace from a checkout path instead:
 
 ## Configuration
 
-The plugin connects to Kinotic OS Cloud (`https://api.kinotic.ai/mcp`). The URL is a
-literal on purpose: the Claude desktop app interpolates neither `${user_config.*}`
-plugin settings nor `${VAR:-default}` env syntax — both reach its connector dialog as
-the raw placeholder and fail validation (and `${user_config.*}` also has open Claude
-Code bugs: anthropics/claude-code#51573, #51538).
+The plugin connects to the Kinotic OS dev server (`https://dev-api.kinotic.ai/mcp`; its
+portal is `https://dev-portal.kinotic.ai`). The URL is a literal on purpose: the Claude
+desktop app interpolates neither `${user_config.*}` plugin settings nor `${VAR:-default}`
+env syntax — both reach its connector dialog as the raw placeholder and fail validation
+(and `${user_config.*}` also has open Claude Code bugs: anthropics/claude-code#51573,
+#51538).
 
 To work against a different Kinotic OS (staging, self-hosted, local), add that
 endpoint as its own MCP server alongside the plugin:

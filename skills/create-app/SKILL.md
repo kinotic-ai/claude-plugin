@@ -39,9 +39,9 @@ matching path — the whole flow happens in their browser, so narrate what they 
 
 1. Tell the user to run `/mcp`, select `kinotic-os`, and authenticate. A browser opens
    on the Kinotic OS **portal** login page — the one with a "New to Kinotic?
-   **Create an organization**" link. The plugin targets Kinotic OS Cloud
-   (`https://api.kinotic.ai/mcp`); for a different Kinotic OS see "Other servers"
-   below.
+   **Create an organization**" link. The plugin targets the Kinotic OS dev server
+   (`https://dev-api.kinotic.ai/mcp`, portal `https://dev-portal.kinotic.ai`); for a
+   different Kinotic OS see "Other servers" below.
 2. **Existing account** — sign in, then on the consent screen ("Authorize …", with a
    "Verified as <host>" line) click **Approve**. **Deny** is a real decision that
    returns a denial to Claude Code — the tools will not appear. If the page shows
