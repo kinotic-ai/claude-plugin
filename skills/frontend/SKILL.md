@@ -7,10 +7,11 @@ description: >
   the deployment sets, browser sign-in through the gateway's login routes and the session
   cookie it establishes, BasicCredentialsResolver and BearerCredentialsResolver for Bun
   and Node clients, machine identities via environment credentials, OIDC login, creating
-  application users, and invoking published services and entity repositories from the UI.
-  Use when building a Kinotic app frontend or SPA, working out what host or URL the UI
-  should point at, wiring up login or authentication, or connecting any client to a
-  Kinotic server.
+  application users, invoking published services and entity repositories from the UI, and
+  the vite.config.ts a UI needs to bundle the domain package and its entity decorators. Use when building a
+  Kinotic app frontend or SPA, working out what host or URL the UI should point at, wiring
+  up login or authentication, connecting any client to a Kinotic server, or when a UI
+  bundle fails to load with a SyntaxError or a blank page.
 ---
 
 # Frontends and Clients
@@ -98,8 +99,9 @@ the page on its own:
 | `VITE_KINOTIC_PORT` | e.g. `443` | Its port |
 | `VITE_KINOTIC_USE_SSL` | `true` or `false` | Whether to connect over TLS |
 
-A Vite project needs **no `vite.config.ts` changes** to be published — no `base`, no
-`define`. A UI on another build tool must pass the three through to the page itself. The
+Publishing needs **no `vite.config.ts` changes** — no `base`, no `define`. A UI on another
+build tool must pass the three through to the page itself. A UI that imports the domain package
+does need a domain alias and a decorator plugin in its Vite config; see below. The
 deployment hands the build no base path and no commit, and the publish uploads `dist` under
 the site's root as it is.
 
@@ -150,6 +152,78 @@ credentials travel on. Only a **Node** process sending credentials must first ca
 `ensureNodeWebSocket()` from `@kinotic-ai/core/node`, which swaps in `ws` because Node's
 own WebSocket ignores a headers option. It is a no-op under Bun and unnecessary in the
 browser — do not add it to a Bun entry point.
+
+## Using the domain package in a Vite UI
+
+A UI that imports the domain package (`@<project slug>/domain`, for its repositories or entity
+types) needs two things in its `vite.config.ts`:
+
+- **An alias to the domain package's source.** The deployment runs `bun run build` in the UI's
+  own directory and never builds the domain package. A production Vite build resolves the
+  package to its `dist/index.js`, which does not exist, and fails with `failed to resolve
+  import "@<project slug>/domain"`. Aliasing the package to its `index.ts` bundles the source.
+- **A plugin that compiles the decorators**, when the UI uses an entity class as a value. The
+  persistence decorators (`@Entity`, `@Id`, `@TenantId`, `@Query`, …) are standard TC39
+  decorators, and Vite 8 copies them into the bundle unchanged. No browser parses that
+  syntax, so the bundle fails to load and the page stays blank.
+
+The decorators reach the bundle only when the UI uses an entity class as a value: `new Todo()`,
+`instanceof Todo`, or reading a static off the class. The template's domain package declares
+`"sideEffects": false`, so a UI that imports a repository and uses `Todo` only as a type
+(`import { TodoRepository, type Todo } from '@<project slug>/domain'`) has the entity module
+dropped from its bundle. A project created before the template declared it lacks the field;
+add it to `packages/domain/package.json`. When unsure which case a UI is in, add the plugin.
+
+Write the plugin into the UI's own `vite.config.ts`, and add `typescript` to the UI's
+`devDependencies`. For a UI at `packages/ui/<name>`:
+
+```typescript
+// vite.config.ts
+import { fileURLToPath } from 'node:url'
+import { defineConfig, type Plugin } from 'vite'
+import ts from 'typescript'
+
+// Compiles the TC39 decorators on entity and repository classes, which Vite leaves in the bundle
+function kinoticDecorators(): Plugin {
+    return {
+        name: 'kinotic-decorators',
+        enforce: 'pre',
+        transform(code, id) {
+            const file = id.split('?', 1)[0]
+            if (!file.endsWith('.ts') || file.includes('/node_modules/')
+                || !/from\s*['"]@kinotic-ai\/persistence['"]/.test(code)) {
+                return
+            }
+            const result = ts.transpileModule(code, {
+                fileName: file,
+                compilerOptions: {
+                    target: ts.ScriptTarget.ES2022,
+                    module: ts.ModuleKind.ESNext,
+                    useDefineForClassFields: true,
+                    sourceMap: true
+                }
+            })
+            return { code: result.outputText, map: result.sourceMapText }
+        }
+    }
+}
+
+export default defineConfig({
+    plugins: [kinoticDecorators()],
+    resolve: {
+        // The deployment builds this UI without building the domain package, so bundle its source
+        alias: {
+            '@<project slug>/domain': fileURLToPath(new URL('../../domain/index.ts', import.meta.url))
+        }
+    }
+})
+```
+
+The plugin compiles every `.ts` module outside `node_modules` that imports from
+`@kinotic-ai/persistence` (the entities and repositories) and leaves the rest of the UI to
+Vite; add a framework plugin such as `vue()` after it. Verify the build with `bun run build`
+in the UI's directory, then parse the bundle, for example `node --check` on each file in
+`dist/assets/*.js`; searching the bundle for `@Entity` misses minified output.
 
 ## Recipe 1 — Browser SPA (session cookie)
 

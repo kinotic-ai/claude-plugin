@@ -30,7 +30,12 @@ decorators with no runtime behavior — the tooling reads them from the TypeScri
 | `@Nested` | `Something[]` | Array elements stay independently queryable (no cross-matching between elements). |
 | `@Version` | `version: string \| null = null` | Optimistic locking; stale saves fail with a conflict. |
 | `@TenantId` | `string` | With `MultiTenancyType.SHARED`: the tenant partition key, auto-populated from the authenticated user. |
-| `@TimeReference` | `timestamp: Date = new Date()` | With `EntityType.STREAM`: the time-series timestamp field. |
+| `@DateTime` | `string` or `string[]` holding ISO-8601 dates | Stored and queried as a date, so it sorts and range-queries by time. Set it with `new Date().toISOString()`. |
+| `@TimeReference` | `timestamp: string = new Date().toISOString()` | With `EntityType.STREAM`: the time-series timestamp field. Pair it with `@DateTime`. |
+
+A `Date` property is rejected by `bun run generate` (`The Date type is not supported because
+values travel as JSON`): entities travel as JSON, where a date is an ISO-8601 string. Declare a
+date as a `string` with `@DateTime`, never as a `Date` or as epoch milliseconds in a `number`.
 
 ## `@Discriminator(propertyName)` — polymorphic fields
 

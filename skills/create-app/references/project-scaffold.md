@@ -66,7 +66,11 @@ directories holding a `.gitkeep`.
 Workspace packages reference the catalog (`"@kinotic-ai/core": "catalog:"`) so the
 Kinotic SDK version is pinned once at the root. The versions are not written by the
 template — Kinotic OS injects the ones the server ships with when it renders the repo, so
-a fresh project always matches its server.
+a fresh project always matches its server. They are exact versions, with no `^`: a caret on
+a beta also accepts later betas, which may be built for a different server. A project whose
+root `package.json` has `^` ranges on `@kinotic-ai/*` was created before the template pinned
+them; remove the `^` from each and run `bun install` again. Never bump an `@kinotic-ai/*`
+version past the one the template wrote.
 
 The current SDK line is `@kinotic-ai/core` and `@kinotic-ai/persistence` on
 `5.0.0-beta.x`, `@kinotic-ai/management-api` on `5.0.0-beta.x`, and the CLI on `5.2.x`.
@@ -172,7 +176,8 @@ export * from './model/Person.js'
 export * from './repositories/PersonRepository.js'
 ```
 
-Its `package.json` `exports` map lists the source conditions (`development`, `bun`) ahead
+Its `package.json` declares `"sideEffects": false`, so a UI bundle that uses entities only
+as types drops the decorated entity classes. Its `exports` map lists the source conditions (`development`, `bun`) ahead
 of the `dist` fallbacks, so inside the repository the package resolves to its TypeScript
 source and type-checks and runs without a prior build. Consumers installing it from a
 registry get the built `dist/` output instead. `bunup.config.ts` keeps that map in sync
@@ -194,7 +199,9 @@ Two things make it a publishable UI rather than a library:
 A Vite project needs no `vite.config.ts` changes to be publishable: the publish uploads
 `dist` under the site root as it is, and the deployment hands the build the three variables
 `VITE_KINOTIC_HOST`, `VITE_KINOTIC_PORT` and `VITE_KINOTIC_USE_SSL`, which Vite exposes to
-the page on its own. Any framework that builds to static assets works. The full contract,
+the page on its own. A UI that imports the domain package aliases it to its TypeScript source, since the
+deployment does not build the domain package, and compiles the entity decorators, which
+browsers cannot parse; the `frontend` skill has the `vite.config.ts`. Any framework that builds to static assets works. The full contract,
 the ambient typing for those variables, and the browser sign-in module are in the
 `frontend` skill.
 
