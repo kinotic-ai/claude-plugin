@@ -248,19 +248,16 @@ tenant handling. The platform stores each row's tenant itself, so a `SHARED` ent
 tenant field to be isolated.
 
 **`@TenantId` is optional.** Declare a `@TenantId` field (`tenantId: string = ''`) only when
-the app's logic needs it: to read a row's tenant id on the entity, or to generate the
-`<Entity>AdminRepository` that selects tenants, which only an entity with a `@TenantId`
-field gets. On a user's save the field is filled with the user's tenant; never set it
-yourself.
+the app's logic needs to read a row's tenant id on the entity. On a user's save the field is
+filled with the user's tenant; never set it yourself.
 
-**A backend service cannot write a `SHARED` entity through the normal repository.** The
-tenant id comes off the authenticated participant, and only an APPLICATION-scope
-participant carries one — the deployed runtime connects at organization scope (see the
-`services` skill), so a `@Publish`ed service saving a `SHARED` entity fails the same
-`tenantId cannot be null or blank` check. Declare a `@TenantId` field on such an entity, so
-generation emits an `<Entity>AdminRepository`: its methods take a leading tenant-selection argument (`['*']` for all
-tenants, or a list of tenant ids), which is how a service reads or writes across tenants.
-Per-user writes driven by the user belong on a client connected as that user.
+**A backend service cannot write a `SHARED` entity.** The tenant id comes off the
+authenticated participant, and only an APPLICATION-scope participant carries one — the
+deployed runtime connects at organization scope (see the `services` skill), so a
+`@Publish`ed service saving a `SHARED` entity fails the same `tenantId cannot be null or
+blank` check. Reads and writes of a user's `SHARED` rows belong on a client connected as that
+user. An entity with a `@TenantId` field also gets a generated `<Entity>AdminRepository`; it
+does not work yet, so do not use it.
 
 Docs: <https://kinotic.ai/apps/persistence/multi-tenancy>.
 
