@@ -70,32 +70,35 @@ hand-set, and the code does not change between local and published.
 webroot or from a dev server that proxies to it. `window.location` is already the right
 answer, so a bare `Kinotic.connect()` and bare REST paths
 (`fetch('/api/auth/me', { credentials: 'include' })`) are correct, and the three variables
-stay unset. A Vite dev proxy has to forward both the REST and the WebSocket paths, and `/v1`
-needs `ws: true` — that is the broker path the STOMP client opens:
+stay unset. A Vite dev proxy has to forward both the REST and the WebSocket paths to the
+app server under the application's API host (the app server identifies the application by
+that hostname), and `/v1` needs `ws: true` — that is the broker path the STOMP client opens:
 
 ```typescript
 // vite.config.ts
+const APP_API_HOST = 'acme--orders.localhost:58505'   // <organizationId>--<applicationId> under the app server's API base URL
+
 proxy: {
-    '/api': { target: 'http://localhost:58503', changeOrigin: true },
-    '/v1':  { target: 'http://localhost:58503', changeOrigin: true, ws: true }
+    '/api': { target: 'http://localhost:58505', headers: { host: APP_API_HOST } },
+    '/v1':  { target: 'http://localhost:58505', headers: { host: APP_API_HOST }, ws: true }
 }
 ```
 
 Cross-origin does not push the SPA off the session cookie. The cookie is `SameSite=Lax`,
-which is sent whenever the API and the site share a site — as `api.kinotic.ai` and
-`apps.kinotic.ai` do in production. A published UI therefore uses the cookie flow
-(Recipe 1), cross-origin or not.
+which is sent whenever the API and the site share a site — as the application's API host
+and its sites, both under `kinotic.ai`, do in production. A published UI therefore uses the
+cookie flow (Recipe 1), cross-origin or not.
 
 ## The UI build contract
 
 Every UI package under `packages/ui` that declares a `build` script is built during the
-deployment with `bun run build` and published to its own site. The build is handed exactly
-three variables — the same three the platform's own consoles use — and Vite exposes them to
-the page on its own:
+deployment with `bun run build` and published to its own site. The build is handed its
+application's API host, `<organizationId>--<applicationId>` under the platform's application
+API domain, as exactly three variables, and Vite exposes them to the page on its own:
 
 | Variable | Value | What the UI does with it |
 |---|---|---|
-| `VITE_KINOTIC_HOST` | e.g. `api.kinotic.ai` | The host the UI connects to Kinotic on from the browser |
+| `VITE_KINOTIC_HOST` | e.g. `acme--orders.apps-api.kinotic.ai` | The host the UI connects to Kinotic on from the browser |
 | `VITE_KINOTIC_PORT` | e.g. `443` | Its port |
 | `VITE_KINOTIC_USE_SSL` | `true` or `false` | Whether to connect over TLS |
 
@@ -133,19 +136,24 @@ whose build writes elsewhere never publishes.
 A package under `packages/ui` **without** a `build` script is treated as a library and is
 never published — that is how shared component packages live there.
 
-For `vite dev` on a developer's machine the same three variables go in the app's `.env`,
-pointing at the local server:
+For `vite dev` on a developer's machine, the UI reaches a local app server through the dev
+server itself: the three variables in the app's `.env.development` point at the dev server,
+and the dev server proxies `/api` and `/v1` to the app server under the application's API
+host (the proxy in "How the UI knows where the server is" above), so the page and its API
+share an origin and a session cookie:
 
 ```
 VITE_KINOTIC_HOST=localhost
-VITE_KINOTIC_PORT=58503
+VITE_KINOTIC_PORT=5173
 VITE_KINOTIC_USE_SSL=false
 ```
 
-The code does not change between local and published. The gateway sets the session cookie
-`Secure` (it is a `__Host-` cookie), so signing in over plain `http://localhost` relies on
-the browser treating localhost as a secure context: Chrome and Firefox do; Safari does not
-store the cookie, and the upgrade after a `204` login arrives unauthenticated.
+The app server's development profile admits a page on any `http://localhost` port as a UI of
+every application. The code does not change between local and published. The gateway sets
+the session cookie `Secure` (it is a `__Host-` cookie), so signing in over plain
+`http://localhost` relies on the browser treating localhost as a secure context: Chrome and
+Firefox do; Safari does not store the cookie, and the upgrade after a `204` login arrives
+unauthenticated.
 
 Kinotic projects run on Bun, whose built-in WebSocket accepts the upgrade headers
 credentials travel on. Only a **Node** process sending credentials must first call
@@ -233,9 +241,14 @@ it produces an unauthenticated upgrade and `Max number of reconnection attempts 
 In a browser the session cookie is the credential, and the gateway's login route
 establishes it.
 
-- The app-scope password login is `POST /api/auth/app/:orgId/:appId/login` with
-  `{ email, password }`. It answers `204` and sets the cookie, or `4xx` with
-  `{ "error": "…" }`. The user must exist in **that application's** user base (portal,
+- The app server identifies the application from the request's hostname, the API host the
+  UI connects to (`<organizationId>--<applicationId>.<apps API domain>`), so the login routes
+  carry no organization or application id in their path.
+- The app-scope password login is `POST /api/auth/app/login` with `{ email, password }`. It
+  answers `204` and sets the cookie, `401` with `{ "error": "Invalid credentials" }` for a
+  wrong email or password, or `403` when the page that sent it is not one of the
+  application's UIs (its published sites, or `http://localhost` under the app server's
+  development profile). The user must exist in **that application's** user base (portal,
   Application → Members); the route does not authenticate organization members.
 - `GET /api/auth/me` answers `204` when the browser holds a live session and `401`
   otherwise. `POST /api/auth/logout` ends the session.
@@ -247,20 +260,17 @@ establishes it.
 //
 // Sign-in for a Kinotic app UI. The deploy builds the UI with three variables naming the
 // platform it was published against, and Vite exposes them to the page on its own:
-//   VITE_KINOTIC_HOST     e.g. api.kinotic.ai
+//   VITE_KINOTIC_HOST     e.g. acme--orders.apps-api.kinotic.ai, the application's API host
 //   VITE_KINOTIC_PORT     e.g. 443
 //   VITE_KINOTIC_USE_SSL  "true" | "false"
-// For `vite dev` on a laptop, put the same three in the app's .env, pointing at the local
-// server (localhost, 58503, false).
+// For `vite dev` on a laptop, put the same three in the app's .env.development, pointing at
+// the dev server (localhost, 5173, false), which proxies to the local app server.
 //
 // A browser cannot set WebSocket upgrade headers, so credentials never go to Kinotic.connect
 // here. The gateway's login route establishes the session cookie, and the STOMP upgrade rides
 // that cookie; connect() takes only the server.
 
 import { Kinotic, type ServerInfo } from '@kinotic-ai/core'
-
-const ORGANIZATION_ID = 'my-organization'
-const APPLICATION_ID = 'my-application'
 
 /** The platform this UI was built against. */
 export function serverOptions(): ServerInfo {
@@ -284,7 +294,7 @@ export function apiUrl(path: string): string {
  * Rejects with the gateway's message ("Invalid credentials" when it gives none).
  */
 export async function login(email: string, password: string): Promise<void> {
-    const res = await fetch(apiUrl(`/api/auth/app/${ORGANIZATION_ID}/${APPLICATION_ID}/login`), {
+    const res = await fetch(apiUrl('/api/auth/app/login'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',            // stores the Set-Cookie from the API's origin
@@ -419,14 +429,15 @@ For OIDC:
    than writing login code against a provider that will reject it.
 2. The frontend drives it through the same login handler Recipe 1's password route
    lives on, so the sign-in page is email-first:
-   - `GET /api/auth/app/:orgId/:appId/login/providers` lists the providers enabled for
+   - `GET /api/auth/app/login/providers` lists the providers enabled for
      the application, for a "sign in with …" button per provider.
-   - `POST /api/auth/app/:orgId/:appId/login/lookup` with `{ email }` answers
+   - `POST /api/auth/app/login/lookup` with `{ email }` answers
      `{ "type": "sso", "redirect": "…" }` when that email is an OIDC user with a live
      provider — send the browser to `redirect` — or `{ "type": "password" }`, in which
-     case show the password field and call Recipe 1's `login()`.
+     case show the password field and call Recipe 1's `login()`. Like the password
+     login, it is refused with `403` from a page that is not one of the application's UIs.
    - The provider returns the browser to
-     `GET /api/auth/app/:orgId/:appId/login/oidc/callback/:configId`, which completes
+     `GET /api/auth/app/login/oidc/callback/:configId`, which completes
      the login and sets the session cookie, then lands back on the site.
    Once the tab is back, Recipe 1's `resume()` sees the live session and opens the
    connection. Every call carries `credentials: 'include'`, as in Recipe 1.
