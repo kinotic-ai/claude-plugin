@@ -88,28 +88,29 @@ Missing either looks like "the server never appeared" after OAuth.
    Any human-readable name works — the server slugifies it into the application id. It
    is rejected only when blank, all punctuation, or slugifying to the platform-reserved
    id `system-api`.
-2. **Settle whether users share data.** Applications default to one shared dataset:
-   every user of the app sees every other user's rows. That is right for a team tool
-   (shared inventory, a group dashboard) and wrong for anything personal (a todo list,
-   notes, per-customer records), where it silently exposes each user's data to all the
-   others. Do not infer it from the app's name — ask, in plain terms:
+2. **Ask whether people sign in.** Ask in plain English, and never show the user the
+   `tenantPerUser` flag, JSON, or code:
 
-   > Should each user see only their own data, or should everyone in the app share one
-   > set of data? For something like a personal todo list you want per-user isolation;
-   > for a shared team workspace you want the shared one.
+   > Should people have to sign in to use your app?
 
-   Per-user isolation needs two settings that must agree — `tenantPerUser` on the
-   Application, and `@Entity(MultiTenancyType.SHARED)` with a `@TenantId` field on each
-   entity (the `entities-and-persistence` skill has the full table). Neither works alone.
+   If they say **no**, tell them that apps anyone can use without signing in are not
+   supported yet, and that it's coming soon 🙂. Ask whether they want to continue with an
+   app people sign in to. Do not create the application unless they do.
+
+   If they say **yes**, create the application with `tenantPerUser: true`, which gives every
+   user a tenant of their own. Each entity then decides who sees its rows:
+   `@Entity(MultiTenancyType.SHARED)` keeps each user's rows private to that user, and
+   `@Entity(MultiTenancyType.NONE)` is data every user of the app sees. A `@TenantId` field is
+   optional, added only when the app's logic needs it. The `entities-and-persistence` skill
+   has the full table.
 
 3. Call the tool titled `Application Service Create Application If Not Exist` with
-   `{"name": ..., "description": ..., "tenantPerUser": true|false}`, passing the answer
-   from the previous step. The call is idempotent — if the application already exists it is
-   returned unchanged, **including its existing `tenantPerUser`**: the argument only applies
-   when the application is created, because flipping it later would split the users into
-   tenanted and untenanted halves. An application that already exists with the wrong setting
-   is changed in the portal (**Application → Settings → Tenant per user**), and only while
-   it still has no users.
+   `{"name": ..., "description": ..., "tenantPerUser": true}`. The call is idempotent — if
+   the application already exists it is returned unchanged, **including its existing
+   `tenantPerUser`**: the argument only applies when the application is created, because
+   flipping it later would split the users into tenanted and untenanted halves. An
+   application that already exists with `tenantPerUser: false` is changed in the portal
+   (**Application → Settings → Tenant per user**), and only while it still has no users.
 4. From the result, record `id` (the server-minted slug of the name, e.g.
    `Inventory App` → `inventory-app`) and `organizationId`. Both are needed in Step 2.
    The result's `tenantPerUser` confirms what the application was created with.
@@ -212,7 +213,9 @@ are the source of truth.
 ## Step 5 — First entity, first push
 
 1. Define a first entity under the path listed in `.config/kinotic.config.ts`
-   `entitiesPaths` (see the entities-and-persistence skill).
+   `entitiesPaths` (see the entities-and-persistence skill), choosing its multi-tenancy by
+   who should see its rows: `SHARED` for data private to each user, `NONE` for data every
+   user sees.
 2. Run `bun run generate` from the project root to generate the typed repository
    classes. The script wraps the Kinotic CLI vendored as a project dependency and runs
    locally — no server connection or login. If the script is missing from
