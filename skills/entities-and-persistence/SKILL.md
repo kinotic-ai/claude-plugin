@@ -62,9 +62,12 @@ Rules:
   reaches the server (the scaffold ships `validate: false`, so the server does the
   rejecting).
 - Browsers cannot parse the decorators, so a Vite UI that uses an entity class as a value
-  (`new Todo()`) needs the `kinoticDecorators()` plugin; the `frontend` skill covers when.
+  (`new Todo()`) compiles them with a plugin in its `vite.config.ts`; the `frontend` skill
+  has it.
+- Dates are `string` fields holding ISO-8601 values, decorated with `@DateTime`
+  (`createdAt: string = new Date().toISOString()`). The generator rejects a `Date` property.
 - For time-series data use `@Entity(MultiTenancyType.NONE, EntityType.STREAM)` with one
-  `@TimeReference` timestamp field.
+  `@TimeReference` `@DateTime` timestamp field.
 
 ## The change workflow
 
