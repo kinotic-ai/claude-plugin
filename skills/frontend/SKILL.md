@@ -7,10 +7,11 @@ description: >
   the deployment sets, browser sign-in through the gateway's login routes and the session
   cookie it establishes, BasicCredentialsResolver and BearerCredentialsResolver for Bun
   and Node clients, machine identities via environment credentials, OIDC login, creating
-  application users, and invoking published services and entity repositories from the UI.
-  Use when building a Kinotic app frontend or SPA, working out what host or URL the UI
-  should point at, wiring up login or authentication, or connecting any client to a
-  Kinotic server.
+  application users, invoking published services and entity repositories from the UI, and
+  the Vite plugin that compiles entity decorators for browser bundles. Use when building a
+  Kinotic app frontend or SPA, working out what host or URL the UI should point at, wiring
+  up login or authentication, connecting any client to a Kinotic server, or when a UI
+  bundle fails to load with a SyntaxError or a blank page.
 ---
 
 # Frontends and Clients
@@ -98,8 +99,9 @@ the page on its own:
 | `VITE_KINOTIC_PORT` | e.g. `443` | Its port |
 | `VITE_KINOTIC_USE_SSL` | `true` or `false` | Whether to connect over TLS |
 
-A Vite project needs **no `vite.config.ts` changes** to be published — no `base`, no
-`define`. A UI on another build tool must pass the three through to the page itself. The
+Publishing needs **no `vite.config.ts` changes** — no `base`, no `define`. A UI on another
+build tool must pass the three through to the page itself. The one thing a Vite config may
+need is the decorator plugin below, depending on how the UI uses entity classes. The
 deployment hands the build no base path and no commit, and the publish uploads `dist` under
 the site's root as it is.
 
@@ -150,6 +152,39 @@ credentials travel on. Only a **Node** process sending credentials must first ca
 `ensureNodeWebSocket()` from `@kinotic-ai/core/node`, which swaps in `ws` because Node's
 own WebSocket ignores a headers option. It is a no-op under Bun and unnecessary in the
 browser — do not add it to a Bun entry point.
+
+## Entity classes in a UI bundle
+
+The persistence decorators (`@Entity`, `@Id`, `@TenantId`, `@Query`, …) are standard TC39
+decorators, and Vite 8 copies them into the bundle unchanged. No browser parses that syntax,
+so a bundle that carries a decorated class fails to load and the page stays blank. Two
+things keep it out:
+
+- **Entities used only as types need nothing.** The template's domain package declares
+  `"sideEffects": false`, so when the UI imports a repository and uses `Todo` only as a type
+  (`import { TodoRepository, type Todo } from '@<project slug>/domain'`), Vite drops the
+  entity module and its decorators. A project created before the template declared it
+  lacks the field; add it to `packages/domain/package.json`.
+- **Entities used as values need the plugin.** `new Todo()`, `instanceof Todo`, or reading a
+  static off the class bundles the decorated class, so its decorators must be compiled.
+  Add `@kinotic-ai/persistence` and `typescript` to the UI's `devDependencies`
+  (`"catalog:"` for persistence) and the plugin to its config:
+
+```typescript
+// vite.config.ts
+import { defineConfig } from 'vite'
+import { kinoticDecorators } from '@kinotic-ai/persistence/vite'
+
+export default defineConfig({
+    plugins: [kinoticDecorators()],
+})
+```
+
+The plugin compiles every `.ts` module outside `node_modules` that imports from
+`@kinotic-ai/persistence` (entities and repositories) and leaves the rest of the UI to Vite.
+When unsure which case a UI is in, add the plugin. Verify any UI that touches entities by
+parsing its built bundle, for example `node --check` on each file in `dist/assets/*.js`;
+searching the bundle for `@Entity` misses minified output.
 
 ## Recipe 1 — Browser SPA (session cookie)
 

@@ -172,7 +172,8 @@ export * from './model/Person.js'
 export * from './repositories/PersonRepository.js'
 ```
 
-Its `package.json` `exports` map lists the source conditions (`development`, `bun`) ahead
+Its `package.json` declares `"sideEffects": false`, so a UI bundle that uses entities only
+as types drops the decorated entity classes. Its `exports` map lists the source conditions (`development`, `bun`) ahead
 of the `dist` fallbacks, so inside the repository the package resolves to its TypeScript
 source and type-checks and runs without a prior build. Consumers installing it from a
 registry get the built `dist/` output instead. `bunup.config.ts` keeps that map in sync
@@ -194,7 +195,9 @@ Two things make it a publishable UI rather than a library:
 A Vite project needs no `vite.config.ts` changes to be publishable: the publish uploads
 `dist` under the site root as it is, and the deployment hands the build the three variables
 `VITE_KINOTIC_HOST`, `VITE_KINOTIC_PORT` and `VITE_KINOTIC_USE_SSL`, which Vite exposes to
-the page on its own. Any framework that builds to static assets works. The full contract,
+the page on its own. A UI that uses an entity class as a value (`new Todo()`) adds the
+`kinoticDecorators()` plugin from `@kinotic-ai/persistence/vite`, because browsers cannot
+parse the decorators Vite leaves in the bundle; see the `frontend` skill. Any framework that builds to static assets works. The full contract,
 the ambient typing for those variables, and the browser sign-in module are in the
 `frontend` skill.
 

@@ -61,6 +61,8 @@ Rules:
   generated repository enforces the decorators client-side before a save/update
   reaches the server (the scaffold ships `validate: false`, so the server does the
   rejecting).
+- Browsers cannot parse the decorators, so a Vite UI that uses an entity class as a value
+  (`new Todo()`) needs the `kinoticDecorators()` plugin; the `frontend` skill covers when.
 - For time-series data use `@Entity(MultiTenancyType.NONE, EntityType.STREAM)` with one
   `@TimeReference` timestamp field.
 
