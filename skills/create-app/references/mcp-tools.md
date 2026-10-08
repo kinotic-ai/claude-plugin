@@ -64,7 +64,7 @@ Idempotent.
 Arguments:
 
 ```json
-{ "name": "Inventory App", "description": "Tracks warehouse inventory", "tenantPerUser": false }
+{ "name": "Inventory App", "description": "Tracks warehouse inventory", "tenantPerUser": true }
 ```
 
 Any human-readable `name` works — the server slugifies it into the id (lowercase
@@ -91,13 +91,13 @@ Result (Application):
   "name": "Inventory App",
   "description": "Tracks warehouse inventory",
   "oidcConfigurationIds": null,
-  "tenantPerUser": false,
+  "tenantPerUser": true,
   "updated": 1753747200000
 }
 ```
 
-`tenantPerUser: false` is the shared-data default — confirm it matches what the user
-asked for before continuing.
+The create-app workflow always passes `tenantPerUser: true`. A result with `false` means
+the application already existed with shared data; tell the user before continuing.
 
 `id` is the server-minted slug of `name`. `organizationId` is derived from the
 authenticated user — pass both into project creation.
