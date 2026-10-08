@@ -99,9 +99,10 @@ Missing either looks like "the server never appeared" after OAuth.
 
    If they say **yes**, create the application with `tenantPerUser: true`, which gives every
    user a tenant of their own. Each entity then decides who sees its rows:
-   `@Entity(MultiTenancyType.SHARED)` with a `@TenantId` field keeps each user's rows private
-   to that user, and `@Entity(MultiTenancyType.NONE)` is data every user of the app sees. The
-   `entities-and-persistence` skill has the full table.
+   `@Entity(MultiTenancyType.SHARED)` keeps each user's rows private to that user, and
+   `@Entity(MultiTenancyType.NONE)` is data every user of the app sees. A `@TenantId` field is
+   optional, added only when the app's logic needs it. The `entities-and-persistence` skill
+   has the full table.
 
 3. Call the tool titled `Application Service Create Application If Not Exist` with
    `{"name": ..., "description": ..., "tenantPerUser": true}`. The call is idempotent — if
@@ -213,8 +214,8 @@ are the source of truth.
 
 1. Define a first entity under the path listed in `.config/kinotic.config.ts`
    `entitiesPaths` (see the entities-and-persistence skill), choosing its multi-tenancy by
-   who should see its rows: `SHARED` with a `@TenantId` field for data private to each
-   user, `NONE` for data every user sees.
+   who should see its rows: `SHARED` for data private to each user, `NONE` for data every
+   user sees.
 2. Run `bun run generate` from the project root to generate the typed repository
    classes. The script wraps the Kinotic CLI vendored as a project dependency and runs
    locally — no server connection or login. If the script is missing from
